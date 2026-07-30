@@ -1,31 +1,27 @@
 # IdP - Login Centralizado
 
-- **OS 01** — Modelagem de dados do Identity Provider (schema, migrations, seed).
-- **OS 02** — Autenticação local: cadastro de usuário (TI), login/logout com
-  sessão própria do IdP, troca de senha obrigatória no primeiro acesso.
-- **OS 03** — Fluxo OAuth2 Authorization Code: `/authorize` e `/token`,
-  emissão de access token JWT assinado (RS256).
-- **OS 04-B** — Reorganização em camadas (Controller/Service/Repository/DTO)
-  do código das OS 02/03, sem mudança de comportamento. Padrão obrigatório
-  daqui pra frente.
-- **OS 05** — Endpoint JWKS público, `kid` no header do JWT, claims
-  definitivas (`name`, `system`) e documentação de validação pros sistemas
-  clientes.
-- **OS 06** — Painel de administração (React, [admin-frontend/](admin-frontend/)):
+- Modelagem de dados do Identity Provider (schema, migrations, seed).
+- Autenticação local: cadastro de usuário (TI), login/logout com sessão
+  própria do IdP, troca de senha obrigatória no primeiro acesso.
+- Fluxo OAuth2 Authorization Code: `/authorize` e `/token`, emissão de
+  access token JWT assinado (RS256).
+- Arquitetura em camadas (Controller/Service/Repository/DTO).
+- Endpoint JWKS público, `kid` no header do JWT, claims definitivas
+  (`name`, `system`) e documentação de validação pros sistemas clientes.
+- Painel de administração (React, [admin-frontend/](admin-frontend/)):
   gestão de usuários, sistemas, papéis e concessão de acesso; tela de
-  auditoria. Rotas administrativas novas no backend (System/Role/UserSystemAccess
-  CRUD) seguindo a arquitetura da OS 04-B.
-- **OS 04** — Refresh token com rotação: `/token` passa a emitir também
-  `refresh_token`, `grant_type=refresh_token` para renovação, detecção de
-  reuso (revoga a linhagem inteira), e `POST /revoke` (RFC 7009). Feita
-  antes da OS 07 por dependência direta.
-- **OS 07** — Client SDK ([idp-client/](idp-client/)): middleware Express
-  reutilizável (`createIdpAuth`) que qualquer sistema do parque instala pra
-  se integrar ao IdP sem reimplementar o fluxo OAuth2/JWT — login,
-  callback, `requireAuth` com renovação automática, `requireRole`, logout.
-  Validado com um sistema de teste mínimo em [example-client-app/](example-client-app/).
+  auditoria. Rotas administrativas no backend (System/Role/UserSystemAccess
+  CRUD).
+- Refresh token com rotação: `/token` emite também `refresh_token`,
+  `grant_type=refresh_token` para renovação, detecção de reuso (revoga a
+  linhagem inteira), e `POST /revoke` (RFC 7009).
+- Client SDK ([idp-client/](idp-client/)): middleware Express reutilizável
+  (`createIdpAuth`) que qualquer sistema do parque instala pra se integrar
+  ao IdP sem reimplementar o fluxo OAuth2/JWT — login, callback,
+  `requireAuth` com renovação automática, `requireRole`, logout. Validado
+  com um sistema de teste mínimo em [example-client-app/](example-client-app/).
 
-## Arquitetura (OS 04-B)
+## Arquitetura
 
 ```
 src/
@@ -39,11 +35,11 @@ src/
 └── prisma/        instancia unica do PrismaClient (so repositories/ e o Store de sessao a importam).
 ```
 
-Decisão registrada (OS 04-B, seção 5): **sem pasta `entities/`** — os
-Services/Repositories usam os tipos gerados pelo Prisma Client diretamente
-(`User`, `System`, etc.) como Entity. Pragmático pro tamanho atual do
-projeto; o desacoplamento total de uma Entity própria só compensaria com um
-plano real de trocar de ORM, o que não é o caso aqui.
+Decisão registrada: **sem pasta `entities/`** — os Services/Repositories
+usam os tipos gerados pelo Prisma Client diretamente (`User`, `System`,
+etc.) como Entity. Pragmático pro tamanho atual do projeto; o
+desacoplamento total de uma Entity própria só compensaria com um plano
+real de trocar de ORM, o que não é o caso aqui.
 
 `PrismaSessionStore` ([src/lib/sessionStore.ts](src/lib/sessionStore.ts)) é a
 única exceção documentada à regra "só repositories/ fala com o Prisma": ela
@@ -98,7 +94,7 @@ Node + Express + TypeScript + Prisma 6 + PostgreSQL.
    npm run dev
    ```
 
-## Autenticação local (OS 02)
+## Autenticação local
 
 Rotas expostas (sem prefixo — ver [src/app.ts](src/app.ts)):
 
@@ -110,7 +106,7 @@ Rotas expostas (sem prefixo — ver [src/app.ts](src/app.ts)):
 | `POST /users` | sessão válida + `isTI=true` + `mustChangePassword=false` | Cria usuário real. Senha nunca é escolhida pelo TI: gera senha temporária (8 chars) e retorna no corpo da resposta, `mustChangePassword=true`. |
 | `PATCH /users/:id` | idem | `{ active }` — ativa/desativa. Usuário inativo não loga mesmo com senha certa. |
 | `POST /users/:id/reset-password` | idem | Gera nova senha temporária e marca `mustChangePassword=true` de novo. |
-| `GET /me` *(OS 06)* | sessão válida | Dados do usuário logado — usado pela SPA do painel pra restaurar sessão num refresh. |
+| `GET /me` | sessão válida | Dados do usuário logado — usado pela SPA do painel pra restaurar sessão num refresh. |
 
 Detalhes de implementação:
 
@@ -120,14 +116,14 @@ Detalhes de implementação:
   tabela criada por fora do Prisma. Cookie `httpOnly`, `sameSite=lax`,
   `secure` ligado automaticamente quando `NODE_ENV=production` (preparado
   pra HTTPS antes mesmo dele estar ativo). Sessão dura 12h — mais que o
-  access token dos sistemas clientes (OS 03/04), já que só controla "estou
-  logado no IdP".
+  access token dos sistemas clientes, já que só controla "estou logado no
+  IdP".
 - **`mustChangePassword`**: enquanto ativo, a sessão autentica normalmente
   mas toda rota de gestão de usuário fica bloqueada (403) até a troca de
   senha — ver `blockIfMustChangePassword` em
   [src/middlewares/mustChangePassword.middleware.ts](src/middlewares/mustChangePassword.middleware.ts).
 - **`isTI`**: flag simples em `User` que restringe as rotas de gestão de
-  usuário — provisório até a OS 06 trazer um modelo de permissões mais rico.
+  usuário — provisório até um modelo de permissões mais rico.
 - **Auditoria**: toda ação relevante grava `AuditLog` (`LOGIN_SUCCESS`,
   `LOGIN_FAILED`, `LOGOUT`, `USER_CREATED`, `USER_UPDATED`,
   `PASSWORD_CHANGED`). Convenção: `userId` é sempre o *sujeito* da ação;
@@ -137,9 +133,9 @@ Detalhes de implementação:
   da rota real de cadastro ([src/services/user.service.ts](src/services/user.service.ts))
   — só reaproveita a função de hash (`hashPassword`), nunca lógica de rota.
   Também cria o System fake e concede ao usuário de teste acesso `comum` a
-  ele, necessário pra exercitar o fluxo OAuth2 da OS 03 de ponta a ponta.
+  ele, necessário pra exercitar o fluxo OAuth2 de ponta a ponta.
 
-## OAuth2 Authorization Code (OS 03)
+## OAuth2 Authorization Code
 
 Rotas ([src/routes/oauth.routes.ts](src/routes/oauth.routes.ts) →
 [src/controllers/oauth.controller.ts](src/controllers/oauth.controller.ts) →
@@ -148,8 +144,8 @@ Rotas ([src/routes/oauth.routes.ts](src/routes/oauth.routes.ts) →
 | Rota | Descrição |
 |---|---|
 | `GET /authorize` | `client_id`, `redirect_uri`, `response_type=code`, `state` (opcional) na query string. Valida `client_id`/`redirect_uri` (comparação **exata** contra `System.redirectUris`) antes de qualquer redirect — divergência aí sempre responde 400 direto, nunca redireciona. Sem sessão → redireciona pra `IDP_LOGIN_URL` com `return_to`. Com `mustChangePassword=true` → redireciona pra `IDP_PASSWORD_CHANGE_URL`. Sem `UserSystemAccess` ativo no sistema → volta pro `redirect_uri` com `error=access_denied`. Caso contrário, gera `AuthorizationCode` (60s, configurável) e redireciona `redirect_uri?code=...&state=...`. |
-| `POST /token` | `grant_type=authorization_code` **ou** `refresh_token` (form-urlencoded, padrão OAuth2 — `express.urlencoded` também está montado). Autentica o **sistema** (não o usuário) comparando `client_secret` contra `clientSecretHash` em tempo constante. Sempre retorna `access_token` (JWT RS256, claims na seção OS 05) **+ `refresh_token`** (OS 04). |
-| `POST /revoke` *(OS 04)* | `token` (refresh token), `client_id`, `client_secret`. Revoga o token — usado no logout dos sistemas clientes. Segue RFC 7009: sempre `200`, mesmo pra token inexistente/já revogado/de outro sistema (nunca revela validade de um token pra quem não o possui). |
+| `POST /token` | `grant_type=authorization_code` **ou** `refresh_token` (form-urlencoded, padrão OAuth2 — `express.urlencoded` também está montado). Autentica o **sistema** (não o usuário) comparando `client_secret` contra `clientSecretHash` em tempo constante. Sempre retorna `access_token` (JWT RS256, claims na seção "JWKS e claims" abaixo) **+ `refresh_token`**. |
+| `POST /revoke` | `token` (refresh token), `client_id`, `client_secret`. Revoga o token — usado no logout dos sistemas clientes. Segue RFC 7009: sempre `200`, mesmo pra token inexistente/já revogado/de outro sistema (nunca revela validade de um token pra quem não o possui). |
 
 **Reuso de `code`** (grant `authorization_code`) e **reuso de `refresh_token`**
 (grant `refresh_token`) são tratados como incidente de segurança, não erro
@@ -163,13 +159,14 @@ da mesma linhagem pode ter sido comprometido junto. Ambos gravam
 **Rotação**: cada troca via `refresh_token` revoga o token atual e emite um
 novo na mesma linhagem (`familyId`), junto com um novo `access_token`. A
 rotação também reconfere se o usuário ainda tem `UserSystemAccess` ativo no
-sistema — é o mecanismo real por trás da nota da OS 06: revogar acesso não
-invalida um `access_token` já emitido, mas impede a próxima renovação.
+sistema — é o mecanismo real por trás da limitação documentada mais abaixo:
+revogar acesso não invalida um `access_token` já emitido, mas impede a
+próxima renovação.
 
 Chaves JWT: `npm run generate:keys` gera `keys/private.pem` (nunca
 versionada) e `keys/public.pem`.
 
-## JWKS e claims (OS 05)
+## JWKS e claims
 
 | Rota | Auth | Descrição |
 |---|---|---|
@@ -187,12 +184,12 @@ versionada) e `keys/public.pem`.
 - **Validação pelos sistemas clientes**: passo a passo completo, com
   exemplo em `jose`, em
   [docs/validacao-de-token.md](docs/validacao-de-token.md) — já
-  implementado de fato pelo Client SDK da OS 07. Destaque: validar `aud` é
+  implementado de fato pelo Client SDK. Destaque: validar `aud` é
   **obrigatório** do lado do cliente; sem isso um token válido de um
   sistema poderia ser aceito por outro que confie na mesma chave pública do
   IdP.
 
-## Painel de administração (OS 06)
+## Painel de administração
 
 ### Backend — rotas administrativas
 
@@ -207,7 +204,7 @@ guard de `/users`).
 | `PATCH /systems/:id` | Atualiza `name`/`redirectUris`/`active`. |
 | `POST /systems/:id/regenerate-secret` | Gera um novo secret (o antigo para de funcionar imediatamente) — só o novo valor em texto puro na resposta. |
 | `GET /systems/:systemId/roles` / `POST /systems/:systemId/roles` | Lista / cria papel dentro do sistema. Único por `(systemId, name)`. |
-| `PATCH /roles/:id` / `DELETE /roles/:id` | Edita / remove papel. Remoção é delete físico de verdade (`Role` não está na lista de "nunca deletar" da OS 01) — bloqueado com 409 se algum `UserSystemAccess` (ativo ou histórico) referenciar o papel. |
+| `PATCH /roles/:id` / `DELETE /roles/:id` | Edita / remove papel. Remoção é delete físico de verdade (`Role` não está na lista de "nunca deletar", ver Schema abaixo) — bloqueado com 409 se algum `UserSystemAccess` (ativo ou histórico) referenciar o papel. |
 | `GET /users/:userId/access` | Acessos **ativos** de um usuário (sistema + papel). |
 | `POST /access` | Concede acesso `{ userId, systemId, roleId }`. 409 se já existir um acesso ativo pra esse par usuário/sistema. |
 | `POST /access/:id/revoke` | Revoga (`revokedAt`) — não deleta a linha. |
@@ -240,7 +237,7 @@ sidebar dark fixa com tema claro/escuro via `data-theme`+`localStorage`, Font Aw
 - **Confirmação explícita** antes de desativar usuário, revogar acesso ou
   regenerar `client_secret` (`ConfirmModal`) — a tela de revogação de
   acesso avisa explicitamente que um `access_token` já emitido continua
-  válido até expirar naturalmente (limitação do modelo JWT, OS 06 seção 5).
+  válido até expirar naturalmente (limitação do modelo JWT).
 - **Deploy**: `Dockerfile` + `nginx.conf` espelham o padrão da referência
   (build Vite → nginx servindo `dist/` com `try_files` pro SPA), trocando o
   único `location /api/` por vários `location` explícitos pros mesmos
@@ -254,13 +251,13 @@ npm install
 npm run dev
 ```
 
-## Client SDK (OS 07)
+## Client SDK
 
 [idp-client/](idp-client/) — pacote `@copperline/idp-client`, middleware
 Express reutilizável pra qualquer sistema do parque (Farol, sistema sem
 login, sistema EJS — todos Express) se integrar ao IdP sem reimplementar o
-fluxo OAuth2/JWT. Ainda não publicado em registry privado (a decidir, OS 07
-seção 3.1) — por enquanto consumido como dependência `file:`/git.
+fluxo OAuth2/JWT. Ainda não publicado em registry privado (a decidir) — por
+enquanto consumido como dependência `file:`/git.
 
 ```ts
 const idpAuth = createIdpAuth({ idpUrl, clientId, clientSecret, redirectUri });
@@ -281,21 +278,20 @@ app.get("/admin", idpAuth.requireAuth, requireRole("admin"), handler);
   validado em `/auth/callback` antes de trocar o `code`.
 - **Cache de JWKS** ([src/jwks.ts](idp-client/src/jwks.ts)): busca uma vez,
   reaproveita por `jwksCacheTtlMs` (default 1h); busca de novo sozinho se
-  aparecer um `kid` que o cache atual não tem (rotação de chave, OS 05).
-  Fetches concorrentes com cache frio compartilham a mesma requisição em
-  vez de disparar N chamadas ao IdP.
+  aparecer um `kid` que o cache atual não tem (rotação de chave). Fetches
+  concorrentes com cache frio compartilham a mesma requisição em vez de
+  disparar N chamadas ao IdP.
 - **Sessão server-side apenas**: `access_token`/`refresh_token` vivem só em
   `req.session.idpAuth` do sistema cliente — nunca chegam ao front, sirva
-  ele server-rendered (EJS) ou uma SPA por trás da própria API do sistema
-  (OS 07, seção 3.4).
+  ele server-rendered (EJS) ou uma SPA por trás da própria API do sistema.
 - **`requireRole(role)`**: 403 se `req.user.role` não bater.
 
-[example-client-app/](example-client-app/) é o sistema de teste mínimo
-citado no critério de aceite 2 da OS — validado de ponta a ponta contra o
-IdP local: login via redirecionamento, rota protegida, renovação automática
-observada via `AuditLog` (`TOKEN_ISSUED` com `grantType=refresh_token`),
-`requireRole` bloqueando papel incorreto, logout revogando o refresh token
-no IdP de fato (não só localmente).
+[example-client-app/](example-client-app/) é o sistema de teste mínimo que
+valida a lib de ponta a ponta contra o IdP local: login via
+redirecionamento, rota protegida, renovação automática observada via
+`AuditLog` (`TOKEN_ISSUED` com `grantType=refresh_token`), `requireRole`
+bloqueando papel incorreto, logout revogando o refresh token no IdP de fato
+(não só localmente).
 
 ## Schema
 
@@ -304,14 +300,14 @@ comentado por entidade. Resumo das 7 tabelas:
 
 | Modelo | Papel |
 |---|---|
-| `User` | Usuários cadastrados por TI (sem self-service). Nunca deletado fisicamente — `active=false` para desativar. Campos de auth (OS 02): `mustChangePassword`, `isTI`. |
+| `User` | Usuários cadastrados por TI (sem self-service). Nunca deletado fisicamente — `active=false` para desativar. Campos de auth: `mustChangePassword`, `isTI`. |
 | `System` | Cada sistema interno (client OAuth) que consome o IdP: slug, clientId/clientSecretHash, redirectUris. |
 | `Role` | Papel dentro de um sistema específico (não é global). Único por `(systemId, name)`. |
 | `UserSystemAccess` | Concessão de acesso usuário→sistema com um papel. Revogação via `revokedAt` (nunca delete). Um acesso ativo por `(userId, systemId)`, garantido por índice único parcial (`WHERE revoked_at IS NULL`), adicionado na migration `add_active_user_system_access_unique`. |
-| `RefreshToken` | Token de sessão por sistema, com `familyId` para agrupar a linhagem de tokens rotacionados e detectar reuso (OS 04). Só o hash é armazenado. |
-| `AuthorizationCode` | Código de uso único do Authorization Code Flow (OS 03), vida curta, `usedAt` marca o resgate. |
-| `AuditLog` | Trilha de auditoria centralizada (login, logout, emissão de token, concessão/revogação de acesso, etc.), `userId`/`systemId` opcionais. Ações OS 03: `SYSTEM_ACCESS`, `TOKEN_ISSUED`, `ACCESS_REVOKED` (reuso de code). `ACCESS_GRANTED`/`ACCESS_REVOKED` (já modeladas na OS 01) entram em uso de fato na OS 06, ao conceder/revogar/trocar papel de um `UserSystemAccess`. |
-| `Session` | Sessão local do IdP (OS 02), usada pelo `Store` customizado do `express-session`. |
+| `RefreshToken` | Token de sessão por sistema, com `familyId` para agrupar a linhagem de tokens rotacionados e detectar reuso. Só o hash é armazenado. |
+| `AuthorizationCode` | Código de uso único do Authorization Code Flow, vida curta, `usedAt` marca o resgate. |
+| `AuditLog` | Trilha de auditoria centralizada (login, logout, emissão de token, concessão/revogação de acesso, etc.), `userId`/`systemId` opcionais. Ações: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGOUT`, `SYSTEM_ACCESS`, `ACCESS_GRANTED`, `ACCESS_REVOKED`, `USER_CREATED`, `USER_UPDATED`, `PASSWORD_CHANGED`, `TOKEN_ISSUED`. |
+| `Session` | Sessão local do IdP, usada pelo `Store` customizado do `express-session`. |
 
 Notas de modelagem importantes (detalhadas nos comentários do schema):
 
