@@ -1,0 +1,54 @@
+import type { RequestHandler } from "express";
+import { asyncHandler } from "../lib/asyncHandler";
+import { LoginSchema, PasswordChangeSchema, type MeResponseDTO } from "../dtos/auth.dto";
+import { parseOrThrow } from "../lib/validate";
+import { authService } from "../services/auth.service";
+
+export const authController = {
+  // Passthrough puro (so seleciona campos ja carregados por requireAuth,
+  // nenhuma logica de negocio) - por isso nao passa por um Service.
+  me: ((req, res) => {
+    const user = req.user!;
+    const body: MeResponseDTO = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      active: user.active,
+      mustChangePassword: user.mustChangePassword,
+      isTI: user.isTI,
+    };
+    res.json(body);
+  }) satisfies RequestHandler,
+
+  login: asyncHandler(async (req, res) => {
+    const dto = parseOrThrow(LoginSchema, req.body ?? {});
+    const user = await authService.login(dto, req.ip);
+
+    // Regenera o id de sessao no login (mitiga session fixation).
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => (err ? reject(err) : resolve()));
+    });
+    req.session.userId = user.id;
+
+    res.json({ mustChangePassword: user.mustChangePassword });
+  }),
+
+  logout: asyncHandler(async (req, res) => {
+    const userId = req.user!.id;
+
+    await new Promise<void>((resolve, reject) => {
+      req.session.destroy((err) => (err ? reject(err) : resolve()));
+    });
+    res.clearCookie("idp.sid");
+
+    await authService.logout(userId, req.ip);
+
+    res.status(204).send();
+  }),
+
+  changePassword: asyncHandler(async (req, res) => {
+    const dto = parseOrThrow(PasswordChangeSchema, req.body ?? {});
+    await authService.changePassword(req.user!, dto, req.ip);
+    res.status(204).send();
+  }),
+};

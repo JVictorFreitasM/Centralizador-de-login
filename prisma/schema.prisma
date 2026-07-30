@@ -1,0 +1,224 @@
+// ---------------------------------------------------------------------------
+// IdP (Identity Provider) - Login Centralizado
+// OS 01 - Modelagem de dados: autenticacao, autorizacao (RBAC por sistema)
+// e auditoria. Sem rotas/logica de login nesta OS (ver OS 02+).
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// User: cadastro feito exclusivamente por TI, sem self-service.
+// Nunca deletado fisicamente - "active=false" e o unico jeito de desativar,
+// pra manter o historico de auditoria integro.
+// ---------------------------------------------------------------------------
+model User {
+  id                 String   @id @default(uuid()) @db.Uuid
+  name               String
+  email              String   @unique
+  passwordHash       String   @map("password_hash")
+  active             Boolean  @default(true)
+  // true ate o usuario definir a propria senha (cadastro sempre nasce com
+  // senha temporaria gerada pelo TI, ou senha fixa de seed em dev) - OS 02.
+  mustChangePassword Boolean  @default(true) @map("must_change_password")
+  // Marca membros do TI, unicos autorizados a cadastrar/editar usuarios e
+  // conceder acesso a sistemas. Flag simples ate a OS 06 trazer um painel
+  // administrativo completo com um modelo de permissoes mais rico.
+  isTI               Boolean  @default(false) @map("is_ti")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  // Quem, do time de TI, criou este cadastro. Nulo apenas para o primeiro
+  // usuario de bootstrap do sistema (nao existe "criador" anterior a ele).
+  createdById  String? @map("created_by") @db.Uuid
+  createdBy    User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers User[]  @relation("UserCreatedBy")
+
+  systemAccesses     UserSystemAccess[]  @relation("UserSystemAccess_User")
+  accessesGranted    UserSystemAccess[]  @relation("UserSystemAccess_GrantedBy")
+  refreshTokens      RefreshToken[]
+  authorizationCodes AuthorizationCode[]
+  auditLogs          AuditLog[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// System: cada sistema interno (client) que consome o IdP (Farol, etc.).
+// slug entra nas claims do token; clientId/clientSecretHash sao usados no
+// fluxo OAuth; redirectUris deve ser validada no /authorize.
+// ---------------------------------------------------------------------------
+model System {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String
+  slug             String   @unique
+  clientId         String   @unique @map("client_id")
+  clientSecretHash String   @map("client_secret_hash")
+  redirectUris     String[] @map("redirect_uris")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  roles              Role[]
+  userAccesses       UserSystemAccess[]
+  refreshTokens      RefreshToken[]
+  authorizationCodes AuthorizationCode[]
+  auditLogs          AuditLog[]
+
+  @@index([slug])
+  @@index([clientId])
+  @@map("systems")
+}
+
+// ---------------------------------------------------------------------------
+// Role: papel dentro de UM sistema (nao existe papel global). Ex.: "gerente"
+// so faz sentido no contexto do Farol.
+// ---------------------------------------------------------------------------
+model Role {
+  id          String  @id @default(uuid()) @db.Uuid
+  systemId    String  @map("system_id") @db.Uuid
+  system      System  @relation(fields: [systemId], references: [id])
+  name        String
+  description String?
+
+  userAccesses UserSystemAccess[]
+
+  @@unique([systemId, name])
+  @@map("roles")
+}
+
+// ---------------------------------------------------------------------------
+// UserSystemAccess: tabela pivo - "usuario X tem acesso ao sistema Y, com
+// papel Z". Revogacao e feita via revokedAt (nunca delete fisico), o que
+// preserva o historico completo de concessoes/revogacoes para auditoria.
+//
+// Regra de negocio "(userId, systemId) unico enquanto revokedAt for null"
+// (um acesso ATIVO por sistema por usuario) e um indice unico PARCIAL do
+// Postgres, nao representavel na DSL do Prisma - ver migration
+// `add_active_user_system_access_unique` que adiciona esse indice via SQL.
+// ---------------------------------------------------------------------------
+model UserSystemAccess {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  user     User   @relation("UserSystemAccess_User", fields: [userId], references: [id])
+  systemId String @map("system_id") @db.Uuid
+  system   System @relation(fields: [systemId], references: [id])
+  roleId   String @map("role_id") @db.Uuid
+  role     Role   @relation(fields: [roleId], references: [id])
+
+  // Membro do TI que concedeu este acesso.
+  grantedById String    @map("granted_by") @db.Uuid
+  grantedBy   User      @relation("UserSystemAccess_GrantedBy", fields: [grantedById], references: [id])
+  grantedAt   DateTime  @default(now()) @map("granted_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  @@index([userId])
+  @@index([systemId])
+  @@map("user_system_access")
+}
+
+// ---------------------------------------------------------------------------
+// RefreshToken: um token por sistema (cada sistema tem sua propria sessao).
+// familyId agrupa a linhagem de tokens rotacionados, usado para detectar
+// reuso (OS 04). Apenas o hash do token e armazenado.
+// ---------------------------------------------------------------------------
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id])
+  systemId  String    @map("system_id") @db.Uuid
+  system    System    @relation(fields: [systemId], references: [id])
+  tokenHash String    @unique @map("token_hash")
+  familyId  String    @map("family_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([tokenHash])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// AuthorizationCode: codigo de uso unico do Authorization Code Flow, vida
+// curtissima (ex.: 60s). usedAt marca o resgate - reuso apos usedAt setado
+// e sinal de ataque e deve ser tratado como tal na logica da OS 02/03.
+// ---------------------------------------------------------------------------
+model AuthorizationCode {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique
+  userId      String    @map("user_id") @db.Uuid
+  user        User      @relation(fields: [userId], references: [id])
+  systemId    String    @map("system_id") @db.Uuid
+  system      System    @relation(fields: [systemId], references: [id])
+  redirectUri String    @map("redirect_uri")
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([code])
+  @@map("authorization_codes")
+}
+
+// ---------------------------------------------------------------------------
+// AuditLog: trilha central de auditoria do IdP. userId/systemId sao
+// opcionais porque nem toda acao tem um usuario identificado (ex.: login
+// falho antes de resolver o e-mail) ou esta ligada a um sistema.
+// ---------------------------------------------------------------------------
+enum AuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  SYSTEM_ACCESS
+  ACCESS_GRANTED
+  ACCESS_REVOKED
+  USER_CREATED
+  USER_UPDATED
+  // Granularidade extra sugerida na OS 02 para distinguir troca de senha
+  // (self-service, apos login com senha temporaria) de um USER_UPDATED
+  // generico feito pelo TI.
+  PASSWORD_CHANGED
+  // OS 03: troca bem-sucedida de authorization code por access token.
+  TOKEN_ISSUED
+
+  @@map("audit_action")
+}
+
+model AuditLog {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String?     @map("user_id") @db.Uuid
+  user      User?       @relation(fields: [userId], references: [id])
+  action    AuditAction
+  systemId  String?     @map("system_id") @db.Uuid
+  system    System?     @relation(fields: [systemId], references: [id])
+  metadata  Json?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([systemId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Session: sessao local do IdP (OS 02) - "estou logado no IdP", independente
+// de qual sistema cliente pediu (isso vem na OS 03). Guardada via Prisma,
+// como o resto do schema, em vez de uma tabela paralela gerenciada por uma
+// lib de terceiros. O express-session so enxerga isto atraves de um Store
+// customizado (ver src/lib/sessionStore.ts).
+// ---------------------------------------------------------------------------
+model Session {
+  sid       String   @id
+  data      String
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("sessions")
+}

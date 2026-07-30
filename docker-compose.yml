@@ -1,0 +1,16 @@
+services:
+  idp-db:
+    image: postgres:16-alpine
+    container_name: idp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: idp
+      POSTGRES_PASSWORD: idp
+      POSTGRES_DB: idp
+    ports:
+      - "5435:5432"
+    volumes:
+      - idp-db-data:/var/lib/postgresql/data
+
+volumes:
+  idp-db-data:
