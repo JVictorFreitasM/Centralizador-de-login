@@ -13,7 +13,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "prisma db seed",
-    "generate:keys": "ts-node --transpile-only scripts/generate-jwt-keys.ts"
+    "generate:keys": "ts-node --transpile-only scripts/generate-jwt-keys.ts",
+    "build:login-ui": "npm --prefix login-ui install && npm --prefix login-ui run build"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"

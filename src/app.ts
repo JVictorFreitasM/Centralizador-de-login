@@ -4,6 +4,7 @@ import { PrismaSessionStore } from "./lib/sessionStore";
 import { redact } from "./lib/redact";
 import { router } from "./routes";
 import { DomainError } from "./errors/domain.errors";
+import { mountPublicAuthUi } from "./lib/publicAuthUi";
 
 // Sessao do IdP so controla "estou logado no IdP" (nao acesso a dado
 // sensivel de nenhum sistema cliente), por isso pode durar mais que o
@@ -47,6 +48,8 @@ export function createApp() {
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
+
+  mountPublicAuthUi(app);
 
   app.use(router);
 

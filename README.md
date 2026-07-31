@@ -20,6 +20,10 @@
   ao IdP sem reimplementar o fluxo OAuth2/JWT — login, callback,
   `requireAuth` com renovação automática, `requireRole`, logout. Validado
   com um sistema de teste mínimo em [example-client-app/](example-client-app/).
+- Interface pública de login ([login-ui/](login-ui/)): as telas reais de
+  `/login-ui` e `/change-password-ui` que o `/authorize` redireciona quando
+  não há sessão — sem elas nenhum fluxo de autenticação completa via
+  navegador.
 
 ## Arquitetura
 
@@ -134,6 +138,49 @@ Detalhes de implementação:
   — só reaproveita a função de hash (`hashPassword`), nunca lógica de rota.
   Também cria o System fake e concede ao usuário de teste acesso `comum` a
   ele, necessário pra exercitar o fluxo OAuth2 de ponta a ponta.
+
+## Interface pública de login — [login-ui/](login-ui/)
+
+React + Vite, telas para `/login-ui` e `/change-password-ui` — os destinos
+pra onde `/authorize` redireciona quando não há sessão válida (ver seção
+seguinte). **Servida pelo próprio backend do IdP, na mesma origem**
+(`src/lib/publicAuthUi.ts` serve o build em `login-ui/dist` diretamente via
+Express), de propósito: assim `IDP_LOGIN_URL`/`IDP_PASSWORD_CHANGE_URL`
+continuam paths relativos, sem precisar de CORS nem preocupação de cookie
+cross-site para o formulário chamar `POST /login`. Rode `npm run build:login-ui`
+(script no `package.json` da raiz) antes de subir o backend — se o build não
+existir, o Express loga um aviso e essas duas rotas respondem 404 em vez de
+travar o processo.
+
+- **Layout público** (sem sidebar — ainda não há usuário autenticado):
+  cartão centralizado, mesmos tokens de CSS/Font Awesome/tema claro-escuro
+  da referência visual, reaproveitados quase sem alteração
+  ([src/index.css](login-ui/src/index.css)).
+- **`return_to`**: lido da query string, só aceito se resolver pra mesma
+  origem do IdP — path relativo ou URL absoluta com `origin` idêntico
+  ([src/lib/returnTo.js](login-ui/src/lib/returnTo.js)). Qualquer outra
+  coisa (domínio externo, `//evil.com` protocol-relative) é rejeitada —
+  proteção contra open redirect, já que um atacante poderia montar um link
+  de login legítimo com `return_to` apontando pra fora.
+- **Encadeamento login → troca de senha**: se `mustChangePassword=true`, o
+  Login navega (client-side, sem recarregar a página) para
+  `/change-password-ui?return_to=...`, passando a senha recém-digitada via
+  estado do React Router — evita pedir a senha atual de novo. Se essa tela
+  for aberta diretamente (ex.: `/authorize` redireciona pra cá sem passar
+  pelo login, porque a sessão já existia mas a senha ainda não foi trocada),
+  o formulário mostra um campo de "senha atual" como alternativa — sem essa
+  rede de segurança, o fluxo trava nesse caso.
+- **Erros sempre genéricos**: a UI só exibe a mensagem que a API já
+  devolve (ex.: `"Credenciais invalidas"`, ou a mensagem de rate limit
+  `"Muitas tentativas de login. Tente novamente mais tarde."` num `429`) —
+  nunca deduz nem detalha o motivo por conta própria.
+
+Rodando localmente:
+
+```
+npm run build:login-ui   # a partir da raiz - instala e builda login-ui/
+npm run dev               # sobe o backend, que passa a servir /login-ui e /change-password-ui
+```
 
 ## OAuth2 Authorization Code
 
