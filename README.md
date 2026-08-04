@@ -24,6 +24,9 @@
   `/login-ui` e `/change-password-ui` que o `/authorize` redireciona quando
   não há sessão — sem elas nenhum fluxo de autenticação completa via
   navegador.
+- Containerização local (Docker Compose): banco, backend (API + `login-ui`)
+  e `admin-frontend`, com hot-reload — substitui instalação manual de
+  Node/PostgreSQL na máquina de dev.
 
 ## Arquitetura
 
@@ -54,49 +57,81 @@ sessão, não uma consulta de domínio).
 
 Node + Express + TypeScript + Prisma 6 + PostgreSQL.
 
-## Rodando localmente
+## Rodando localmente (Docker — recomendado)
 
-1. Suba o banco (container isolado, próprio deste projeto, porta `5435`):
+Três containers via Docker Compose: banco (Postgres, sem porta exposta ao
+host), backend (API + `login-ui`, hot-reload) e `admin-frontend` (hot-reload).
+Substitui instalação manual de Node/PostgreSQL na máquina de dev.
 
-   ```
-   docker compose up -d
-   ```
+1. Copie `.env.example` para `.env` (`DATABASE_URL` e `PORT` são
+   sobrescritos pelo `environment:` do Compose — o resto das variáveis é
+   reaproveitado do `.env`).
 
-2. Instale as dependências:
+2. Gere o par de chaves RSA (precisa existir **antes** de subir o backend —
+   sem elas a assinatura de token falha; roda fora do Docker, exige Node
+   local, ou via container avulso se não tiver Node instalado):
 
    ```
    npm install
-   ```
-
-3. Rode as migrations:
-
-   ```
-   npm run prisma:migrate
-   ```
-
-4. Rode o seed **(apenas fora de produção — recusa rodar se `NODE_ENV=production`)**:
-   1 System fake, roles "comum"/"admin", 1 usuário de TI e 1 usuário comum de
-   teste, ambos com senha fixa `123` (hasheada com bcrypt) e
-   `mustChangePassword=true`. Use `-- --skip-force-change` pra pular essa
-   flag por conveniência em dev:
-
-   ```
-   npm run seed
-   npm run seed -- --skip-force-change
-   ```
-
-5. Gere o par de chaves RSA usado pra assinar os access tokens (a privada
-   nunca é versionada — fica em `keys/`, no `.gitignore`):
-
-   ```
    npm run generate:keys
+   # ou, sem Node local:
+   docker run --rm -v "${PWD}:/app" -w /app node:20-alpine sh -c "npm install && npm run generate:keys"
    ```
 
-6. Suba a API:
+3. Suba tudo:
 
    ```
-   npm run dev
+   docker compose up -d --build
    ```
+
+   Ordem de subida: Postgres (com healthcheck — o backend só inicia depois
+   dele responder `pg_isready`, não só do container ter "subido") →
+   `prisma migrate deploy` automático → build do `login-ui` → API. Sem
+   passo manual de migration — no Contracheque Bot esse passo foi
+   esquecido uma vez e gerou erro (`table does not exist`) no primeiro
+   teste; aqui está garantido no `command:` do serviço `backend`.
+
+4. Popule o banco **(container fresco nasce vazio — critério de aceite
+   "dados persistem entre reinicializações" vale pro volume, não elimina a
+   necessidade do seed na primeira subida)**:
+
+   ```
+   docker exec idp-backend npm run seed
+   ```
+
+5. Acesse:
+   - API + `login-ui`: **http://localhost:3000** (`/login-ui`, `/change-password-ui`, `/.well-known/jwks.json`, etc.)
+   - Painel administrativo: **http://localhost:5175** *(não 5173/5174 — já ocupadas nesta máquina de teste pelo Contracheque Bot e pelo Farol, respectivamente)*
+
+**Hot-reload**: bind mount do Docker Desktop no Windows não propaga eventos
+nativos de sistema de arquivos pro container — os dois serviços usam
+**polling** (`ts-node-dev --poll` no backend, `server.watch.usePolling` no
+Vite do `admin-frontend`) pra funcionar de verdade nessa combinação. Editar
+um arquivo no host reflete sem rebuild.
+
+**Migrations/dependências novas**: se mudar `prisma/schema.prisma` ou
+`package.json`, `docker compose up -d --build` sozinho pode não bastar — os
+volumes anônimos de `node_modules` só são renovados de fato com
+`docker compose up -d --build -V <servico>` (`-V` força recriar os volumes
+anônimos a partir da imagem nova).
+
+### Sem Docker (rodando backend/admin-frontend direto no host)
+
+Ainda funciona, mas o Postgres do `docker-compose.yml` não expõe porta ao
+host (de propósito, ver seção 3.1 da OS de containerização) — pra isso,
+suba um Postgres à parte com porta publicada (`docker run -d -p 5435:5432
+-e POSTGRES_USER=idp -e POSTGRES_PASSWORD=idp -e POSTGRES_DB=idp
+postgres:17`) e aponte `DATABASE_URL` no `.env` pra
+`postgresql://idp:idp@localhost:5435/idp?schema=public`. Depois:
+
+```
+npm install
+npm run prisma:migrate
+npm run seed
+npm run generate:keys
+npm run build:login-ui
+npm run dev
+```
 
 ## Autenticação local
 
@@ -366,6 +401,7 @@ Notas de modelagem importantes (detalhadas nos comentários do schema):
 
 ## Banco de dados
 
-Este projeto usa seu **próprio** container Postgres (`idp-db`, porta `5435`,
-volume `idp-db-data`), isolado do banco do Farol — não reaproveita
+Este projeto usa seu **próprio** container Postgres (`postgres-idp`, volume
+`idp_pgdata`, rede Docker `idp-net` própria — sem porta exposta ao host),
+isolado das redes/containers do Farol e do Contracheque Bot — não reaproveita
 infraestrutura de outro sistema.

@@ -1,0 +1,9 @@
+# Dev-mode (hot-reload via `vite dev`) - usado pelo docker-compose.yml local.
+# O Dockerfile (sem sufixo) e o build de producao (nginx), usado a parte.
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+EXPOSE 5173
+CMD ["npm", "run", "dev", "--", "--host"]

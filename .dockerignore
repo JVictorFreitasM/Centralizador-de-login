@@ -1,0 +1,12 @@
+node_modules
+dist
+*.log
+.env
+keys
+.git
+admin-frontend
+login-ui/node_modules
+login-ui/dist
+example-client-app
+idp-client
+frontend-referencia

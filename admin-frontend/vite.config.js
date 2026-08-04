@@ -7,7 +7,11 @@ import react from '@vitejs/plugin-react';
 // (React Router) foram escolhidas de proposito em portugues (/usuarios,
 // /sistemas, /acessos, /auditoria, /entrar) pra nunca colidir com esses
 // prefixos.
-const BACKEND_URL = 'http://localhost:3000';
+// Fora do Docker (dev local), o backend fala em localhost:3000. Dentro do
+// compose, "localhost" dentro do container do admin-frontend nao alcanca o
+// container do backend - precisa ser o nome do servico ("backend"). Por
+// isso o alvo do proxy e parametrizavel via VITE_API_URL.
+const BACKEND_URL = process.env.VITE_API_URL || 'http://localhost:3000';
 const BACKEND_PATHS = [
   '/me',
   '/login',
@@ -30,5 +34,13 @@ export default defineConfig({
     proxy: Object.fromEntries(
       BACKEND_PATHS.map((path) => [path, { target: BACKEND_URL, changeOrigin: true, secure: false }])
     ),
+    // Bind mount do Docker Desktop no Windows nao propaga eventos nativos
+    // de sistema de arquivos pro container - sem isto, hot-reload nao
+    // dispara quando o arquivo e editado no host. Custo (mais CPU) e
+    // aceitavel pro tamanho deste projeto; sem downside relevante fora do
+    // Docker tambem.
+    watch: {
+      usePolling: true,
+    },
   },
 });

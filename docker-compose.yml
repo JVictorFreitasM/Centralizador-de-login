@@ -1,16 +1,83 @@
 services:
-  idp-db:
-    image: postgres:16-alpine
-    container_name: idp-db
+
+  postgres:
+    image: postgres:17
+    container_name: postgres-idp
     restart: unless-stopped
     environment:
       POSTGRES_USER: idp
       POSTGRES_PASSWORD: idp
       POSTGRES_DB: idp
-    ports:
-      - "5435:5432"
     volumes:
-      - idp-db-data:/var/lib/postgresql/data
+      - idp_pgdata:/var/lib/postgresql/data
+    networks:
+      - idp-net
+    # Sem isto, "depends_on" simples so esperaria o container do Postgres
+    # SUBIR, nao ficar pronto pra aceitar conexao - a migration do backend
+    # entraria numa corrida contra o banco ainda inicializando. O backend
+    # abaixo usa "condition: service_healthy" contra este healthcheck.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idp -d idp"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: idp-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://idp:idp@postgres:5432/idp?schema=public
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/login-ui/node_modules
+      - ./keys:/app/keys:ro
+    networks:
+      - idp-net
+    # Migration automatica antes de aceitar requisicao (ver OS - no
+    # Contracheque Bot esse passo foi esquecido e deu erro "table does not
+    # exist" no primeiro teste; nao repetir aqui). login-ui precisa estar
+    # buildado ANTES do backend subir, pra /login-ui e /change-password-ui
+    # nao respoderem 404 - roda aqui em vez de exigir passo manual do dev.
+    command: sh -c "npx prisma migrate deploy && npm run build:login-ui && npm run dev"
+
+  admin-frontend:
+    build:
+      context: ./admin-frontend
+      dockerfile: Dockerfile.dev
+    container_name: idp-admin-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    volumes:
+      - ./admin-frontend:/app
+      - /app/node_modules
+    ports:
+      # 5173 (Contracheque Bot) e 5174 (Farol) ja ocupadas nesta maquina de
+      # teste - 5175 pro admin-frontend do IdP.
+      - "5175:5173"
+    environment:
+      # "localhost" dentro deste container nao alcanca o container do
+      # backend - precisa ser o nome do servico Compose.
+      VITE_API_URL: http://backend:3000
+    networks:
+      - idp-net
+    command: npm run dev -- --host
+
+networks:
+  idp-net:
+    driver: bridge
 
 volumes:
-  idp-db-data:
+  idp_pgdata:
