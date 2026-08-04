@@ -30,16 +30,17 @@ function toAccessResponseDTO(access: AccessWithSystemAndRole): UserSystemAccessR
   };
 }
 
-// Path relativo de proposito (mesmo padrao de IDP_LOGIN_URL/IDP_PASSWORD_CHANGE_URL,
-// OS 02-B): resolve contra a propria origem que serviu a pagina do menu,
-// sem o backend precisar saber seu proprio hostname/porta externos.
-function buildAuthorizeUrl(system: AccessWithSystemAndRole["system"]): string {
-  const params = new URLSearchParams({
-    client_id: system.clientId,
-    redirect_uri: system.redirectUris[0],
-    response_type: "code",
-  });
-  return `/authorize?${params.toString()}`;
+// Aponta pro /auth/login do PROPRIO sistema cliente, nao direto pro
+// /authorize do IdP - o /auth/login e quem gera e guarda o `state`
+// anti-CSRF (Client SDK, OS 07) antes de redirecionar pro /authorize; sem
+// passar por ele, o /auth/callback do sistema rejeita o login com "Estado
+// invalido ou expirado", mesmo a sessao do IdP sendo valida. Derivado da
+// origem do proprio redirect_uri cadastrado (convencao: todo sistema
+// montado com createIdpAuth usa o loginPath default "/auth/login" - se um
+// sistema customizar isso, precisa ser ajustado aqui tambem).
+function buildLoginUrl(system: AccessWithSystemAndRole["system"]): string {
+  const origin = new URL(system.redirectUris[0]).origin;
+  return `${origin}/auth/login`;
 }
 
 function toMeSystemDTO(access: AccessWithSystemAndRole): MeSystemDTO {
@@ -48,7 +49,7 @@ function toMeSystemDTO(access: AccessWithSystemAndRole): MeSystemDTO {
     name: access.system.name,
     slug: access.system.slug,
     role: access.role.name,
-    authorizeUrl: buildAuthorizeUrl(access.system),
+    loginUrl: buildLoginUrl(access.system),
   };
 }
 

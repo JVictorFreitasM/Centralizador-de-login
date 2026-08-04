@@ -148,7 +148,7 @@ Rotas expostas (sem prefixo — ver [src/app.ts](src/app.ts)):
 | `PATCH /users/:id` | idem | `{ active }` — ativa/desativa. Usuário inativo não loga mesmo com senha certa. |
 | `POST /users/:id/reset-password` | idem | Gera nova senha temporária e marca `mustChangePassword=true` de novo. |
 | `GET /me` | sessão válida | Dados do usuário logado — usado pela SPA do painel pra restaurar sessão num refresh. |
-| `GET /me/systems` *(OS 13)* | sessão válida | Sistemas com `UserSystemAccess` ativo do **próprio** usuário logado (nunca aceita `userId` por parâmetro) — `name`, `slug`, `role`, `authorizeUrl` pronto pra usar. Nunca inclui `clientSecretHash`. Fonte do menu central ([login-ui/](login-ui/)). |
+| `GET /me/systems` *(OS 13)* | sessão válida | Sistemas com `UserSystemAccess` ativo do **próprio** usuário logado (nunca aceita `userId` por parâmetro) — `name`, `slug`, `role`, `loginUrl` pronto pra usar. `loginUrl` aponta pro `/auth/login` **do sistema cliente** (não pro `/authorize` do IdP direto — é o `/auth/login` que monta o `state` anti-CSRF do Client SDK antes de redirecionar pro `/authorize`; pular essa etapa faz o `/auth/callback` do sistema rejeitar com "Estado invalido ou expirado", mesmo com sessão do IdP válida). Nunca inclui `clientSecretHash`. Fonte do menu central ([login-ui/](login-ui/)). |
 
 Detalhes de implementação:
 
@@ -221,9 +221,10 @@ o processo.
   (ex.: sessão antiga, chegou aqui sem passar pelo formulário de login)
   redireciona pra `/change-password-ui` — rede de segurança, não o fluxo
   normal. Um card por sistema com acesso ativo, clicável (navegação de
-  página inteira pro `authorizeUrl` retornado pela API — o usuário já tem
-  sessão do IdP, então `/authorize` resolve direto pro `code`, sem pedir
-  login de novo). Sem nenhum acesso concedido, mostra estado vazio
+  página inteira pro `loginUrl` retornado pela API — o `/auth/login` do
+  próprio sistema cliente, nunca o `/authorize` do IdP direto; o usuário já
+  tem sessão do IdP, então esse `/authorize` resolve direto pro `code`, sem
+  pedir login de novo). Sem nenhum acesso concedido, mostra estado vazio
   ("Você ainda não tem acesso a nenhum sistema..."), nunca um erro técnico.
 
 Rodando localmente:

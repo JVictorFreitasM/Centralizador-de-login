@@ -33,12 +33,13 @@ export interface UserSystemAccessResponseDTO {
 
 // GET /me/systems (OS 13) - visao do PROPRIO usuario logado sobre seus
 // acessos, nao a visao administrativa acima. Nunca inclui client_secret/hash
-// nem qualquer campo sensivel do System - so o necessario pra montar o link
-// de /authorize (client_id e publico por natureza).
+// nem qualquer campo sensivel do System.
 export interface MeSystemDTO {
   systemId: string;
   name: string;
   slug: string;
   role: string;
-  authorizeUrl: string;
+  // /auth/login do SISTEMA CLIENTE (nao o /authorize do IdP direto) - ver
+  // buildLoginUrl em userSystemAccess.service.ts pro motivo.
+  loginUrl: string;
 }

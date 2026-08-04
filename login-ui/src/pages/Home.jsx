@@ -52,10 +52,12 @@ export default function Home() {
   };
 
   const handleOpenSystem = (system) => {
-    // Navegacao de pagina inteira de proposito - inicia o /authorize de
-    // verdade (o usuario ja tem sessao do IdP, entao resolve direto pro
-    // code, sem pedir login de novo).
-    window.location.href = system.authorizeUrl;
+    // Navegacao de pagina inteira de proposito, pro /auth/login do PROPRIO
+    // sistema (nao direto pro /authorize do IdP) - e o /auth/login que
+    // monta o `state` anti-CSRF antes de redirecionar pro /authorize; o
+    // usuario ja tem sessao do IdP, entao esse /authorize resolve direto
+    // pro code, sem pedir login de novo.
+    window.location.href = system.loginUrl;
   };
 
   return (
