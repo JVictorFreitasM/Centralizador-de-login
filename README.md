@@ -23,7 +23,9 @@
 - Interface pública de login ([login-ui/](login-ui/)): as telas reais de
   `/login-ui` e `/change-password-ui` que o `/authorize` redireciona quando
   não há sessão — sem elas nenhum fluxo de autenticação completa via
-  navegador.
+  navegador. Inclui o menu central pós-login (`/home`): lista os sistemas
+  com acesso concedido ao usuário, cada um levando direto ao `/authorize`
+  daquele sistema.
 - Containerização local (Docker Compose): banco, backend (API + `login-ui`)
   e `admin-frontend`, com hot-reload — substitui instalação manual de
   Node/PostgreSQL na máquina de dev.
@@ -146,6 +148,7 @@ Rotas expostas (sem prefixo — ver [src/app.ts](src/app.ts)):
 | `PATCH /users/:id` | idem | `{ active }` — ativa/desativa. Usuário inativo não loga mesmo com senha certa. |
 | `POST /users/:id/reset-password` | idem | Gera nova senha temporária e marca `mustChangePassword=true` de novo. |
 | `GET /me` | sessão válida | Dados do usuário logado — usado pela SPA do painel pra restaurar sessão num refresh. |
+| `GET /me/systems` *(OS 13)* | sessão válida | Sistemas com `UserSystemAccess` ativo do **próprio** usuário logado (nunca aceita `userId` por parâmetro) — `name`, `slug`, `role`, `authorizeUrl` pronto pra usar. Nunca inclui `clientSecretHash`. Fonte do menu central ([login-ui/](login-ui/)). |
 
 Detalhes de implementação:
 
@@ -176,16 +179,19 @@ Detalhes de implementação:
 
 ## Interface pública de login — [login-ui/](login-ui/)
 
-React + Vite, telas para `/login-ui` e `/change-password-ui` — os destinos
-pra onde `/authorize` redireciona quando não há sessão válida (ver seção
-seguinte). **Servida pelo próprio backend do IdP, na mesma origem**
-(`src/lib/publicAuthUi.ts` serve o build em `login-ui/dist` diretamente via
-Express), de propósito: assim `IDP_LOGIN_URL`/`IDP_PASSWORD_CHANGE_URL`
-continuam paths relativos, sem precisar de CORS nem preocupação de cookie
-cross-site para o formulário chamar `POST /login`. Rode `npm run build:login-ui`
-(script no `package.json` da raiz) antes de subir o backend — se o build não
-existir, o Express loga um aviso e essas duas rotas respondem 404 em vez de
-travar o processo.
+React + Vite, telas para `/login-ui`, `/change-password-ui` e `/home` (menu
+central pós-login) — os destinos pra onde `/authorize` redireciona quando
+não há sessão válida (ver seção seguinte), e pra onde o próprio login
+manda o usuário quando não há um `return_to` (fluxo OAuth2 de um sistema
+específico) em andamento. **Servida pelo próprio backend do IdP, na mesma
+origem** (`src/lib/publicAuthUi.ts` serve o build em `login-ui/dist`
+diretamente via Express), de propósito: assim
+`IDP_LOGIN_URL`/`IDP_PASSWORD_CHANGE_URL` continuam paths relativos, sem
+precisar de CORS nem preocupação de cookie cross-site para o formulário
+chamar `POST /login`. Rode `npm run build:login-ui` (script no
+`package.json` da raiz) antes de subir o backend — se o build não existir,
+o Express loga um aviso e essas três rotas respondem 404 em vez de travar
+o processo.
 
 - **Layout público** (sem sidebar — ainda não há usuário autenticado):
   cartão centralizado, mesmos tokens de CSS/Font Awesome/tema claro-escuro
@@ -209,12 +215,22 @@ travar o processo.
   devolve (ex.: `"Credenciais invalidas"`, ou a mensagem de rate limit
   `"Muitas tentativas de login. Tente novamente mais tarde."` num `429`) —
   nunca deduz nem detalha o motivo por conta própria.
+- **Menu central (`/home`, [src/pages/Home.jsx](login-ui/src/pages/Home.jsx))**:
+  busca `GET /me` + `GET /me/systems` ao montar; sem sessão válida (`401`)
+  redireciona pra `/login-ui`; com `mustChangePassword=true` ainda pendente
+  (ex.: sessão antiga, chegou aqui sem passar pelo formulário de login)
+  redireciona pra `/change-password-ui` — rede de segurança, não o fluxo
+  normal. Um card por sistema com acesso ativo, clicável (navegação de
+  página inteira pro `authorizeUrl` retornado pela API — o usuário já tem
+  sessão do IdP, então `/authorize` resolve direto pro `code`, sem pedir
+  login de novo). Sem nenhum acesso concedido, mostra estado vazio
+  ("Você ainda não tem acesso a nenhum sistema..."), nunca um erro técnico.
 
 Rodando localmente:
 
 ```
 npm run build:login-ui   # a partir da raiz - instala e builda login-ui/
-npm run dev               # sobe o backend, que passa a servir /login-ui e /change-password-ui
+npm run dev               # sobe o backend, que passa a servir /login-ui, /change-password-ui e /home
 ```
 
 ## OAuth2 Authorization Code

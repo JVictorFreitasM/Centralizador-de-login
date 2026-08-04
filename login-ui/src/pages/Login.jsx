@@ -14,7 +14,6 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,24 +43,15 @@ export default function Login() {
         return;
       }
 
-      setSuccess(true);
+      // Sem return_to (ex.: usuario acessou /login-ui direto, nao veio de
+      // um /authorize especifico) - destino padrao e o menu central (OS 13).
+      navigate('/home', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Nao foi possivel entrar. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
   };
-
-  if (success) {
-    return (
-      <AuthCard
-        icon="fas fa-circle-check"
-        iconGradient="linear-gradient(135deg, var(--success), #34d399)"
-        title="Login realizado com sucesso"
-        subtitle="Você já pode fechar esta janela ou continuar navegando."
-      />
-    );
-  }
 
   return (
     <AuthCard icon="fas fa-shield-halved" title="IdP - Login Centralizado" subtitle="Entre com sua conta">

@@ -30,3 +30,15 @@ export interface UserSystemAccessResponseDTO {
   grantedAt: Date;
   revokedAt: Date | null;
 }
+
+// GET /me/systems (OS 13) - visao do PROPRIO usuario logado sobre seus
+// acessos, nao a visao administrativa acima. Nunca inclui client_secret/hash
+// nem qualquer campo sensivel do System - so o necessario pra montar o link
+// de /authorize (client_id e publico por natureza).
+export interface MeSystemDTO {
+  systemId: string;
+  name: string;
+  slug: string;
+  role: string;
+  authorizeUrl: string;
+}

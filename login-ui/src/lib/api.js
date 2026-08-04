@@ -1,7 +1,6 @@
 // src/lib/api.js
-// Wrapper minimo de fetch pras duas chamadas que esta UI precisa (login,
-// troca de senha) - sem axios, app pequeno demais pra justificar a
-// dependencia extra.
+// Wrapper minimo de fetch pras chamadas que esta UI precisa - sem axios,
+// app pequeno demais pra justificar a dependencia extra.
 export class ApiError extends Error {
   constructor(status, data) {
     super(data?.error_description || data?.error || `Erro na requisicao (HTTP ${status})`);
@@ -10,12 +9,12 @@ export class ApiError extends Error {
   }
 }
 
-async function apiPost(path, body) {
+async function request(method, path, body) {
   const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method,
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     credentials: 'same-origin',
-    body: JSON.stringify(body),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   const data = await res.json().catch(() => ({}));
@@ -27,10 +26,30 @@ async function apiPost(path, body) {
   return data;
 }
 
+function apiGet(path) {
+  return request('GET', path);
+}
+
+function apiPost(path, body) {
+  return request('POST', path, body);
+}
+
 export function login(email, password) {
   return apiPost('/login', { email, password });
 }
 
 export function changePassword(currentPassword, newPassword) {
   return apiPost('/password/change', { currentPassword, newPassword });
+}
+
+export function getMe() {
+  return apiGet('/me');
+}
+
+export function getMySystems() {
+  return apiGet('/me/systems');
+}
+
+export function logout() {
+  return apiPost('/logout');
 }

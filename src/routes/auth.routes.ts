@@ -6,6 +6,7 @@ import { loginRateLimiter } from "../middlewares/rateLimit.middleware";
 export const authRouter = Router();
 
 authRouter.get("/me", requireAuth, authController.me);
+authRouter.get("/me/systems", requireAuth, authController.mySystems);
 authRouter.post("/login", loginRateLimiter, authController.login);
 authRouter.post("/logout", requireAuth, authController.logout);
 authRouter.post("/password/change", requireAuth, authController.changePassword);

@@ -3,6 +3,7 @@ import { asyncHandler } from "../lib/asyncHandler";
 import { LoginSchema, PasswordChangeSchema, type MeResponseDTO } from "../dtos/auth.dto";
 import { parseOrThrow } from "../lib/validate";
 import { authService } from "../services/auth.service";
+import { userSystemAccessService } from "../services/userSystemAccess.service";
 
 export const authController = {
   // Passthrough puro (so seleciona campos ja carregados por requireAuth,
@@ -19,6 +20,13 @@ export const authController = {
     };
     res.json(body);
   }) satisfies RequestHandler,
+
+  // OS 13: sempre o usuario da PROPRIA sessao (req.user.id) - nunca um
+  // userId vindo de query/params/body, pra nao vazar acesso de outra pessoa.
+  mySystems: asyncHandler(async (req, res) => {
+    const systems = await userSystemAccessService.listSystemsForCurrentUser(req.user!.id);
+    res.json(systems);
+  }),
 
   login: asyncHandler(async (req, res) => {
     const dto = parseOrThrow(LoginSchema, req.body ?? {});

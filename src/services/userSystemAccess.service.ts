@@ -3,7 +3,7 @@ import { systemRepository } from "../repositories/system.repository";
 import { roleRepository } from "../repositories/role.repository";
 import { userSystemAccessRepository, type AccessWithSystemAndRole } from "../repositories/userSystemAccess.repository";
 import { auditLogRepository } from "../repositories/auditLog.repository";
-import type { ChangeAccessRoleDTO, GrantAccessDTO, UserSystemAccessResponseDTO } from "../dtos/userSystemAccess.dto";
+import type { ChangeAccessRoleDTO, GrantAccessDTO, MeSystemDTO, UserSystemAccessResponseDTO } from "../dtos/userSystemAccess.dto";
 import {
   AccessAlreadyGrantedError,
   AccessAlreadyRevokedError,
@@ -30,7 +30,37 @@ function toAccessResponseDTO(access: AccessWithSystemAndRole): UserSystemAccessR
   };
 }
 
+// Path relativo de proposito (mesmo padrao de IDP_LOGIN_URL/IDP_PASSWORD_CHANGE_URL,
+// OS 02-B): resolve contra a propria origem que serviu a pagina do menu,
+// sem o backend precisar saber seu proprio hostname/porta externos.
+function buildAuthorizeUrl(system: AccessWithSystemAndRole["system"]): string {
+  const params = new URLSearchParams({
+    client_id: system.clientId,
+    redirect_uri: system.redirectUris[0],
+    response_type: "code",
+  });
+  return `/authorize?${params.toString()}`;
+}
+
+function toMeSystemDTO(access: AccessWithSystemAndRole): MeSystemDTO {
+  return {
+    systemId: access.systemId,
+    name: access.system.name,
+    slug: access.system.slug,
+    role: access.role.name,
+    authorizeUrl: buildAuthorizeUrl(access.system),
+  };
+}
+
 export const userSystemAccessService = {
+  // OS 13: visao do PROPRIO usuario sobre seus acessos - so sistemas
+  // ativos, so acessos ativos, nunca aceita um userId alheio (quem chama
+  // sempre passa o id da propria sessao, nunca um parametro de rota).
+  async listSystemsForCurrentUser(userId: string): Promise<MeSystemDTO[]> {
+    const accesses = await userSystemAccessRepository.findActiveForUser(userId);
+    return accesses.filter((access) => access.system.active).map(toMeSystemDTO);
+  },
+
   async listAccessForUser(userId: string): Promise<UserSystemAccessResponseDTO[]> {
     const user = await userRepository.findById(userId);
     if (!user) {
