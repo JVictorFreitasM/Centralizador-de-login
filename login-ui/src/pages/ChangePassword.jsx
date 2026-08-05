@@ -1,12 +1,13 @@
 // src/pages/ChangePassword.jsx
 import { useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
 import { changePassword, ApiError } from '../lib/api';
 import { safeReturnTo } from '../lib/returnTo';
 
 export default function ChangePassword() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnTo(searchParams.get('return_to'));
 
@@ -22,7 +23,6 @@ export default function ChangePassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,24 +45,17 @@ export default function ChangePassword() {
         window.location.href = returnTo;
         return;
       }
-      setSuccess(true);
+
+      // Sem return_to (ex.: sessao ja existia, sem vir de um /authorize
+      // especifico) - destino padrao e o menu central (OS 13), igual ao
+      // Login.
+      navigate('/home', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível trocar a senha. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
   };
-
-  if (success) {
-    return (
-      <AuthCard
-        icon="fas fa-circle-check"
-        iconGradient="linear-gradient(135deg, var(--success), #34d399)"
-        title="Senha alterada com sucesso"
-        subtitle="Você já pode fechar esta janela ou continuar navegando."
-      />
-    );
-  }
 
   return (
     <AuthCard
