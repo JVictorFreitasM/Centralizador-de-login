@@ -9,4 +9,5 @@ authRouter.get("/me", requireAuth, authController.me);
 authRouter.get("/me/systems", requireAuth, authController.mySystems);
 authRouter.post("/login", loginRateLimiter, authController.login);
 authRouter.post("/logout", requireAuth, authController.logout);
+authRouter.get("/session/end", authController.endSession);
 authRouter.post("/password/change", requireAuth, authController.changePassword);

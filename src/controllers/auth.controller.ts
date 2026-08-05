@@ -3,6 +3,7 @@ import { asyncHandler } from "../lib/asyncHandler";
 import { LoginSchema, PasswordChangeSchema, type MeResponseDTO } from "../dtos/auth.dto";
 import { parseOrThrow } from "../lib/validate";
 import { authService } from "../services/auth.service";
+import { oauthService } from "../services/oauth.service";
 import { userSystemAccessService } from "../services/userSystemAccess.service";
 
 export const authController = {
@@ -52,6 +53,30 @@ export const authController = {
     await authService.logout(userId, req.ip);
 
     res.status(204).send();
+  }),
+
+  // GET /session/end: contraparte navegavel do /logout acima, chamada pelo
+  // idp-client (createLogoutHandler) via redirect apos encerrar a sessao
+  // LOCAL do sistema cliente - e o unico jeito de tambem encerrar a sessao
+  // do IdP (cookie httpOnly desta origem, que o backend do sistema cliente
+  // nao enxerga). Idempotente de proposito: sem sessao ativa, so redireciona.
+  endSession: asyncHandler(async (req, res) => {
+    const clientId = typeof req.query.client_id === "string" ? req.query.client_id : undefined;
+    const postLogoutRedirectUri =
+      typeof req.query.post_logout_redirect_uri === "string" ? req.query.post_logout_redirect_uri : undefined;
+
+    const redirectTo = await oauthService.resolveEndSessionRedirect(clientId, postLogoutRedirectUri);
+
+    const userId = req.session.userId;
+    if (userId) {
+      await new Promise<void>((resolve, reject) => {
+        req.session.destroy((err) => (err ? reject(err) : resolve()));
+      });
+      res.clearCookie("idp.sid");
+      await authService.logout(userId, req.ip);
+    }
+
+    res.redirect(redirectTo);
   }),
 
   changePassword: asyncHandler(async (req, res) => {

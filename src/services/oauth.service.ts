@@ -18,8 +18,10 @@ import { AuthorizationCodeGrantFieldsSchema, RefreshTokenGrantFieldsSchema, Revo
 import {
   ClientAuthenticationError,
   InvalidGrantError,
+  InvalidRedirectUriError,
   OAuthRequestValidationError,
   TokenAccessDeniedError,
+  UnknownClientError,
   UnsupportedGrantTypeError,
 } from "../errors/domain.errors";
 import { ACCESS_TOKEN_TTL_SECONDS } from "./token.service";
@@ -326,5 +328,43 @@ export const oauthService = {
       systemId: stored.systemId,
       metadata: { ip },
     });
+  },
+
+  // RP-Initiated Logout (segue GET /session/end): valida client_id e onde
+  // o navegador pode ser mandado de volta apos o IdP encerrar a sessao
+  // dele. O post_logout_redirect_uri normalmente NAO esta na lista literal
+  // de redirectUris (aquela e so o /auth/callback) - por isso a checagem e
+  // por ORIGEM, mesma logica de confianca ja usada em buildLoginUrl (OS 13):
+  // a origem de um redirectUri registrado e confiavel, sem exigir um
+  // segundo cadastro de URIs so pra esse fluxo.
+  async resolveEndSessionRedirect(
+    clientId: string | undefined,
+    postLogoutRedirectUri: string | undefined
+  ): Promise<string> {
+    if (!clientId) {
+      throw new UnknownClientError();
+    }
+    const system = await systemRepository.findByClientId(clientId);
+    if (!system || !system.active) {
+      throw new UnknownClientError();
+    }
+
+    if (!postLogoutRedirectUri) {
+      throw new InvalidRedirectUriError();
+    }
+
+    let target: URL;
+    try {
+      target = new URL(postLogoutRedirectUri);
+    } catch {
+      throw new InvalidRedirectUriError();
+    }
+
+    const allowedOrigins = new Set(system.redirectUris.map((uri) => new URL(uri).origin));
+    if (!allowedOrigins.has(target.origin)) {
+      throw new InvalidRedirectUriError();
+    }
+
+    return target.toString();
   },
 };
