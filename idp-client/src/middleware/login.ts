@@ -16,7 +16,10 @@ export function createLoginHandler(config: ResolvedIdpClientConfig): RequestHand
       req.session.idpAuthReturnTo = returnTo;
     }
 
-    const url = new URL("/authorize", config.idpUrl);
+    // authorizeUrl (nao idpUrl): este redirect vai pro navegador do usuario,
+    // que pode nao enxergar o IdP pelo mesmo hostname/porta que o backend
+    // usa server-to-server (ver IdpClientConfig.authorizeUrl).
+    const url = new URL("/authorize", config.authorizeUrl);
     url.searchParams.set("client_id", config.clientId);
     url.searchParams.set("redirect_uri", config.redirectUri);
     url.searchParams.set("response_type", "code");

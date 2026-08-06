@@ -34,13 +34,26 @@ function toAccessResponseDTO(access: AccessWithSystemAndRole): UserSystemAccessR
 // /authorize do IdP - o /auth/login e quem gera e guarda o `state`
 // anti-CSRF (Client SDK, OS 07) antes de redirecionar pro /authorize; sem
 // passar por ele, o /auth/callback do sistema rejeita o login com "Estado
-// invalido ou expirado", mesmo a sessao do IdP sendo valida. Derivado da
-// origem do proprio redirect_uri cadastrado (convencao: todo sistema
-// montado com createIdpAuth usa o loginPath default "/auth/login" - se um
-// sistema customizar isso, precisa ser ajustado aqui tambem).
+// invalido ou expirado", mesmo a sessao do IdP sendo valida.
+//
+// OS 07-B: usar so a ORIGEM do redirect_uri quebra sistemas montados sob um
+// prefixo (ex.: Farol, atras do proxy /api do Vite: redirect_uri termina em
+// "/api/auth/callback", nao em "/auth/callback" na raiz) - o loginUrl
+// resultante ficava "http://host/auth/login" em vez de
+// "http://host/api/auth/login", um path que o sistema nem serve. Em vez
+// disso, deriva do PATH COMPLETO: troca o sufixo "/auth/callback" (convencao
+// do callbackPath default do Client SDK) por "/auth/login" (idem loginPath),
+// preservando qualquer prefixo antes dele. Sistemas que customizam esses
+// paths no createIdpAuth precisam ser ajustados aqui tambem.
+const DEFAULT_CALLBACK_SUFFIX = "/auth/callback";
+const DEFAULT_LOGIN_SUFFIX = "/auth/login";
+
 function buildLoginUrl(system: AccessWithSystemAndRole["system"]): string {
-  const origin = new URL(system.redirectUris[0]).origin;
-  return `${origin}/auth/login`;
+  const redirectUri = new URL(system.redirectUris[0]);
+  const prefix = redirectUri.pathname.endsWith(DEFAULT_CALLBACK_SUFFIX)
+    ? redirectUri.pathname.slice(0, -DEFAULT_CALLBACK_SUFFIX.length)
+    : "";
+  return `${redirectUri.origin}${prefix}${DEFAULT_LOGIN_SUFFIX}`;
 }
 
 function toMeSystemDTO(access: AccessWithSystemAndRole): MeSystemDTO {

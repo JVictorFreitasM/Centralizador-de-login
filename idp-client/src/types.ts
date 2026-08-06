@@ -4,6 +4,15 @@
 export interface IdpClientConfig {
   /** URL base do IdP, sem barra final (ex.: "http://192.168.x.x:4000"). */
   idpUrl: string;
+  /**
+   * URL base do IdP como o NAVEGADOR do usuario a enxerga - so precisa ser
+   * definida quando difere de `idpUrl` (ex.: backend containerizado falando
+   * com o IdP via host.docker.internal/nome-de-servico, mas o navegador do
+   * usuario, fora do container, precisa de localhost). Usada apenas no
+   * redirect browser-facing de /auth/login; chamadas server-to-server
+   * (/token, JWKS, /revoke) sempre usam `idpUrl`. @default idpUrl
+   */
+  authorizeUrl?: string;
   clientId: string;
   /** Nunca deve chegar ao front do sistema cliente (OS 07, secao 4). */
   clientSecret: string;
