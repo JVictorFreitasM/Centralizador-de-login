@@ -17,6 +17,7 @@ function toSystemResponseDTO(system: {
   slug: string;
   clientId: string;
   redirectUris: string[];
+  postLogoutRedirectUris: string[];
   active: boolean;
   createdAt: Date;
 }): SystemResponseDTO {
@@ -26,6 +27,7 @@ function toSystemResponseDTO(system: {
     slug: system.slug,
     clientId: system.clientId,
     redirectUris: system.redirectUris,
+    postLogoutRedirectUris: system.postLogoutRedirectUris,
     active: system.active,
     createdAt: system.createdAt,
   };
@@ -52,6 +54,7 @@ export const systemService = {
         clientId,
         clientSecretHash: sha256Hex(clientSecret),
         redirectUris: dto.redirectUris,
+        postLogoutRedirectUris: dto.postLogoutRedirectUris,
       });
 
       return { ...toSystemResponseDTO(system), clientSecret };

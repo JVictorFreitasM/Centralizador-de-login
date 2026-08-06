@@ -24,13 +24,14 @@ export const systemRepository = {
     clientId: string;
     clientSecretHash: string;
     redirectUris: string[];
+    postLogoutRedirectUris: string[];
   }): Promise<System> {
     return prisma.system.create({ data });
   },
 
   update(
     id: string,
-    data: Partial<Pick<System, "name" | "redirectUris" | "active">>
+    data: Partial<Pick<System, "name" | "redirectUris" | "postLogoutRedirectUris" | "active">>
   ): Promise<System> {
     return prisma.system.update({ where: { id }, data });
   },

@@ -332,11 +332,12 @@ export const oauthService = {
 
   // RP-Initiated Logout (segue GET /session/end): valida client_id e onde
   // o navegador pode ser mandado de volta apos o IdP encerrar a sessao
-  // dele. O post_logout_redirect_uri normalmente NAO esta na lista literal
-  // de redirectUris (aquela e so o /auth/callback) - por isso a checagem e
-  // por ORIGEM, mesma logica de confianca ja usada em buildLoginUrl (OS 13):
-  // a origem de um redirectUri registrado e confiavel, sem exigir um
-  // segundo cadastro de URIs so pra esse fluxo.
+  // dele. Match EXATO contra postLogoutRedirectUris - campo proprio,
+  // separado de redirectUris (que e so o /auth/callback OAuth) - porque um
+  // sistema pode ter frontend e backend em origens diferentes, e o destino
+  // pos-logout normalmente e o frontend. Mesma politica de seguranca ja
+  // usada em /authorize (OS 03): nunca aceitar por prefixo/origem, sempre
+  // contra a lista cadastrada.
   async resolveEndSessionRedirect(
     clientId: string | undefined,
     postLogoutRedirectUri: string | undefined
@@ -349,22 +350,10 @@ export const oauthService = {
       throw new UnknownClientError();
     }
 
-    if (!postLogoutRedirectUri) {
+    if (!postLogoutRedirectUri || !system.postLogoutRedirectUris.includes(postLogoutRedirectUri)) {
       throw new InvalidRedirectUriError();
     }
 
-    let target: URL;
-    try {
-      target = new URL(postLogoutRedirectUri);
-    } catch {
-      throw new InvalidRedirectUriError();
-    }
-
-    const allowedOrigins = new Set(system.redirectUris.map((uri) => new URL(uri).origin));
-    if (!allowedOrigins.has(target.origin)) {
-      throw new InvalidRedirectUriError();
-    }
-
-    return target.toString();
+    return postLogoutRedirectUri;
   },
 };

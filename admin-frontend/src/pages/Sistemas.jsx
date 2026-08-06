@@ -5,7 +5,7 @@ import SystemDetailModal from '../components/SystemDetailModal';
 import { systemsApi, getErrorMessage } from '../services/api';
 
 function emptyForm() {
-  return { name: '', slug: '', redirectUris: [''] };
+  return { name: '', slug: '', redirectUris: [''], postLogoutRedirectUris: [''] };
 }
 
 export default function Sistemas() {
@@ -44,12 +44,27 @@ export default function Sistemas() {
   const removeUriField = (index) =>
     setForm((f) => ({ ...f, redirectUris: f.redirectUris.filter((_, i) => i !== index) }));
 
+  const updateLogoutUri = (index, value) => {
+    setForm((f) => ({
+      ...f,
+      postLogoutRedirectUris: f.postLogoutRedirectUris.map((uri, i) => (i === index ? value : uri)),
+    }));
+  };
+  const addLogoutUriField = () =>
+    setForm((f) => ({ ...f, postLogoutRedirectUris: [...f.postLogoutRedirectUris, ''] }));
+  const removeLogoutUriField = (index) =>
+    setForm((f) => ({ ...f, postLogoutRedirectUris: f.postLogoutRedirectUris.filter((_, i) => i !== index) }));
+
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
     setCreateError(null);
     setCreating(true);
     try {
-      const payload = { ...form, redirectUris: form.redirectUris.map((u) => u.trim()).filter(Boolean) };
+      const payload = {
+        ...form,
+        redirectUris: form.redirectUris.map((u) => u.trim()).filter(Boolean),
+        postLogoutRedirectUris: form.postLogoutRedirectUris.map((u) => u.trim()).filter(Boolean),
+      };
       const res = await systemsApi.create(payload);
       setCreateOpen(false);
       setForm(emptyForm());
@@ -113,6 +128,7 @@ export default function Sistemas() {
                     <th>Slug</th>
                     <th>Client ID</th>
                     <th>Redirect URIs</th>
+                    <th>Post-logout URIs</th>
                     <th>Status</th>
                     <th>Ações</th>
                   </tr>
@@ -124,6 +140,7 @@ export default function Sistemas() {
                       <td><code>{system.slug}</code></td>
                       <td><code style={{ fontSize: '0.78rem' }}>{system.clientId}</code></td>
                       <td>{system.redirectUris.length}</td>
+                      <td>{system.postLogoutRedirectUris.length}</td>
                       <td>
                         <span className={`badge ${system.active ? 'success' : 'neutral'}`}>
                           {system.active ? 'Ativo' : 'Inativo'}
@@ -216,6 +233,35 @@ export default function Sistemas() {
                   <button type="button" className="btn btn-secondary btn-sm" onClick={addUriField}>
                     <i className="fas fa-plus"></i> Adicionar URI
                   </button>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Post-logout Redirect URIs</label>
+                  {form.postLogoutRedirectUris.map((uri, index) => (
+                    <div key={index} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <input
+                        className="form-input"
+                        value={uri}
+                        onChange={(e) => updateLogoutUri(index, e.target.value)}
+                        placeholder="http://localhost:5174/login"
+                      />
+                      {form.postLogoutRedirectUris.length > 1 && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => removeLogoutUriField(index)}
+                          aria-label="Remover"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={addLogoutUriField}>
+                    <i className="fas fa-plus"></i> Adicionar URI
+                  </button>
+                  <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.35rem' }}>
+                    Opcional - só necessário se o sistema usar GET /session/end (RP-Initiated Logout).
+                  </small>
                 </div>
                 <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '1rem 0' }}>
                   client_id e client_secret são gerados automaticamente. O secret é exibido uma única vez.

@@ -19,6 +19,15 @@ const RedirectUrisSchema = z
   })
   .min(1, "Informe ao menos uma redirect_uri");
 
+// Ao contrario de redirectUris, pode ser vazia - um sistema so precisa
+// disso se usar GET /session/end (RP-Initiated Logout, ver
+// oauthService.resolveEndSessionRedirect).
+const PostLogoutRedirectUrisSchema = z
+  .array(z.string().refine(isValidUrl, "post_logout_redirect_uri invalida"), {
+    invalid_type_error: "postLogoutRedirectUris deve ser uma lista de URLs",
+  })
+  .default([]);
+
 export const CreateSystemSchema = z
   .object({
     name: z
@@ -30,6 +39,7 @@ export const CreateSystemSchema = z
       .refine((value) => SLUG_REGEX.test(value), "Slug deve conter apenas letras minusculas, numeros e hifens")
       .transform((value) => value.trim()),
     redirectUris: RedirectUrisSchema,
+    postLogoutRedirectUris: PostLogoutRedirectUrisSchema,
   })
   .strip();
 export type CreateSystemDTO = z.infer<typeof CreateSystemSchema>;
@@ -38,6 +48,7 @@ export const UpdateSystemSchema = z
   .object({
     name: z.string().min(1, "Nome e obrigatorio").transform((value) => value.trim()).optional(),
     redirectUris: RedirectUrisSchema.optional(),
+    postLogoutRedirectUris: PostLogoutRedirectUrisSchema.optional(),
     active: z.boolean().optional(),
   })
   .strip();
@@ -49,6 +60,7 @@ export interface SystemResponseDTO {
   slug: string;
   clientId: string;
   redirectUris: string[];
+  postLogoutRedirectUris: string[];
   active: boolean;
   createdAt: Date;
 }

@@ -7,6 +7,9 @@ export default function SystemDetailModal({ system, onClose, onUpdated, onSecret
   const [name, setName] = useState(system.name);
   const [active, setActive] = useState(system.active);
   const [redirectUris, setRedirectUris] = useState(system.redirectUris.length ? system.redirectUris : ['']);
+  const [postLogoutRedirectUris, setPostLogoutRedirectUris] = useState(
+    system.postLogoutRedirectUris.length ? system.postLogoutRedirectUris : ['']
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -39,6 +42,12 @@ export default function SystemDetailModal({ system, onClose, onUpdated, onSecret
   const addUriField = () => setRedirectUris((uris) => [...uris, '']);
   const removeUriField = (index) => setRedirectUris((uris) => uris.filter((_, i) => i !== index));
 
+  const updateLogoutUri = (index, value) =>
+    setPostLogoutRedirectUris((uris) => uris.map((uri, i) => (i === index ? value : uri)));
+  const addLogoutUriField = () => setPostLogoutRedirectUris((uris) => [...uris, '']);
+  const removeLogoutUriField = (index) =>
+    setPostLogoutRedirectUris((uris) => uris.filter((_, i) => i !== index));
+
   const handleSave = async () => {
     setSaving(true);
     setSaveError(null);
@@ -48,6 +57,7 @@ export default function SystemDetailModal({ system, onClose, onUpdated, onSecret
         name,
         active,
         redirectUris: redirectUris.map((u) => u.trim()).filter(Boolean),
+        postLogoutRedirectUris: postLogoutRedirectUris.map((u) => u.trim()).filter(Boolean),
       });
       setSaveSuccess(true);
       onUpdated();
@@ -163,6 +173,26 @@ export default function SystemDetailModal({ system, onClose, onUpdated, onSecret
             <button type="button" className="btn btn-secondary btn-sm" onClick={addUriField}>
               <i className="fas fa-plus"></i> Adicionar URI
             </button>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Post-logout Redirect URIs</label>
+            {postLogoutRedirectUris.map((uri, index) => (
+              <div key={index} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <input className="form-input" value={uri} onChange={(e) => updateLogoutUri(index, e.target.value)} />
+                {postLogoutRedirectUris.length > 1 && (
+                  <button type="button" className="btn btn-ghost" onClick={() => removeLogoutUriField(index)}>
+                    <i className="fas fa-trash"></i>
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" className="btn btn-secondary btn-sm" onClick={addLogoutUriField}>
+              <i className="fas fa-plus"></i> Adicionar URI
+            </button>
+            <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.35rem' }}>
+              Opcional - só necessário se o sistema usar GET /session/end (RP-Initiated Logout).
+            </small>
           </div>
 
           <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
