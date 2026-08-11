@@ -30,30 +30,25 @@
   e `admin-frontend`, com hot-reload — substitui instalação manual de
   Node/PostgreSQL na máquina de dev.
 
+## Documentação
+
+| Documento | Conteúdo |
+|---|---|
+| [docs/ARQUITETURA.md](docs/ARQUITETURA.md) | Componentes, diagrama, decisões de design |
+| [docs/SCHEMA.md](docs/SCHEMA.md) | Banco de dados — 8 tabelas, diagrama ER, índices, soft/hard delete |
+| [docs/SEGURANCA.md](docs/SEGURANCA.md) | Senhas, tokens, sessão, rate limiting, validação de `redirect_uri` |
+| [docs/JWT_VALIDATION.md](docs/validacao-de-token.md) | Claims, JWKS, validação passo a passo (com exemplo em `jose`) |
+| [docs/CLIENT_SDK.md](docs/CLIENT_SDK.md) | Como instalar/usar `@copperline/idp-client` num sistema cliente |
+| [docs/FLUXOS_OAUTH2.md](docs/FLUXOS_OAUTH2.md) | Diagramas de sequência: Authorization Code, refresh, logout |
+| [screenshots/](screenshots/) | Capturas de tela das interfaces (ver pendências no índice da pasta) |
+
 ## Arquitetura
 
-```
-src/
-├── controllers/   camada HTTP - le req, monta DTO, chama o Service, monta a resposta. Nunca contem regra de negocio.
-├── services/      toda a logica de negocio (hash, tokens, RBAC, auditoria). Nao conhece Request/Response, so chama repositories/.
-├── repositories/  unico lugar que fala com o Prisma Client - um por entidade principal.
-├── dtos/          formato de entrada/saida entre camadas, validado com zod na fronteira. DTO de saida nunca inclui campo sensivel.
-├── middlewares/   sessao, rate limit, gate de troca de senha obrigatoria.
-├── routes/        so liga rota (metodo + path) -> controller.
-├── errors/        DomainError e subclasses - o handler global (src/app.ts) traduz pra status/corpo HTTP.
-└── prisma/        instancia unica do PrismaClient (so repositories/ e o Store de sessao a importam).
-```
-
-Decisão registrada: **sem pasta `entities/`** — os Services/Repositories
-usam os tipos gerados pelo Prisma Client diretamente (`User`, `System`,
-etc.) como Entity. Pragmático pro tamanho atual do projeto; o
-desacoplamento total de uma Entity própria só compensaria com um plano
-real de trocar de ORM, o que não é o caso aqui.
-
-`PrismaSessionStore` ([src/lib/sessionStore.ts](src/lib/sessionStore.ts)) é a
-única exceção documentada à regra "só repositories/ fala com o Prisma": ela
-implementa o contrato de `Store` do `express-session` (infraestrutura de
-sessão, não uma consulta de domínio).
+Camadas: `controllers/` (HTTP) → `services/` (regra de negócio) →
+`repositories/` (Prisma) → `dtos/` (validação zod na fronteira). Sem pasta
+`entities/` — Services/Repositories usam os tipos gerados pelo Prisma Client
+diretamente. Detalhes completos, diagrama de componentes e decisões
+registradas em **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)**.
 
 ## Stack
 
@@ -246,6 +241,10 @@ Rotas ([src/routes/oauth.routes.ts](src/routes/oauth.routes.ts) →
 | `POST /token` | `grant_type=authorization_code` **ou** `refresh_token` (form-urlencoded, padrão OAuth2 — `express.urlencoded` também está montado). Autentica o **sistema** (não o usuário) comparando `client_secret` contra `clientSecretHash` em tempo constante. Sempre retorna `access_token` (JWT RS256, claims na seção "JWKS e claims" abaixo) **+ `refresh_token`**. |
 | `POST /revoke` | `token` (refresh token), `client_id`, `client_secret`. Revoga o token — usado no logout dos sistemas clientes. Segue RFC 7009: sempre `200`, mesmo pra token inexistente/já revogado/de outro sistema (nunca revela validade de um token pra quem não o possui). |
 
+Diagramas de sequência completos (caminho feliz, casos especiais de
+`/authorize`, refresh, logout) em
+**[docs/FLUXOS_OAUTH2.md](docs/FLUXOS_OAUTH2.md)**.
+
 **Reuso de `code`** (grant `authorization_code`) e **reuso de `refresh_token`**
 (grant `refresh_token`) são tratados como incidente de segurança, não erro
 trivial: um token/code já usado sendo apresentado de novo é sinal de
@@ -353,10 +352,9 @@ npm run dev
 ## Client SDK
 
 [idp-client/](idp-client/) — pacote `@copperline/idp-client`, middleware
-Express reutilizável pra qualquer sistema do parque (Farol, sistema sem
-login, sistema EJS — todos Express) se integrar ao IdP sem reimplementar o
-fluxo OAuth2/JWT. Ainda não publicado em registry privado (a decidir) — por
-enquanto consumido como dependência `file:`/git.
+Express reutilizável pra qualquer sistema do parque (Farol, Gerenciamento
+de TVs, Contracheque Bot — todos Express) se integrar ao IdP sem
+reimplementar o fluxo OAuth2/JWT.
 
 ```ts
 const idpAuth = createIdpAuth({ idpUrl, clientId, clientSecret, redirectUri });
@@ -366,55 +364,16 @@ app.get("/painel", idpAuth.requireAuth, handler);
 app.get("/admin", idpAuth.requireAuth, requireRole("admin"), handler);
 ```
 
-- **`requireAuth`**: sem token → redireciona pra `/auth/login?returnTo=...`.
-  Token válido → valida localmente via JWKS (assinatura + `aud` contra o
-  próprio `clientId`, obrigatório) sem chamar o IdP. Token expirado → tenta
-  renovar via `refresh_token` automaticamente; se a renovação falhar por
-  qualquer motivo (refresh também expirado/revogado, ou acesso do usuário
-  revogado no meio-tempo) → sempre novo login, nunca erro genérico
-  ([src/middleware/requireAuth.ts](idp-client/src/middleware/requireAuth.ts)).
-- **`state` CSRF**: gerado em `/auth/login`, guardado na sessão local,
-  validado em `/auth/callback` antes de trocar o `code`.
-- **Cache de JWKS** ([src/jwks.ts](idp-client/src/jwks.ts)): busca uma vez,
-  reaproveita por `jwksCacheTtlMs` (default 1h); busca de novo sozinho se
-  aparecer um `kid` que o cache atual não tem (rotação de chave). Fetches
-  concorrentes com cache frio compartilham a mesma requisição em vez de
-  disparar N chamadas ao IdP.
-- **Sessão server-side apenas**: `access_token`/`refresh_token` vivem só em
-  `req.session.idpAuth` do sistema cliente — nunca chegam ao front, sirva
-  ele server-rendered (EJS) ou uma SPA por trás da própria API do sistema.
-- **`requireRole(role)`**: 403 se `req.user.role` não bater.
-
-[example-client-app/](example-client-app/) é o sistema de teste mínimo que
-valida a lib de ponta a ponta contra o IdP local: login via
-redirecionamento, rota protegida, renovação automática observada via
-`AuditLog` (`TOKEN_ISSUED` com `grantType=refresh_token`), `requireRole`
-bloqueando papel incorreto, logout revogando o refresh token no IdP de fato
-(não só localmente).
+Configuração completa, comportamento de `requireAuth`/`requireRole`, cache
+de JWKS e o sistema de teste [example-client-app/](example-client-app/) em
+**[docs/CLIENT_SDK.md](docs/CLIENT_SDK.md)**.
 
 ## Schema
 
-O schema vive em [prisma/schema.prisma](prisma/schema.prisma) e está
-comentado por entidade. Resumo das 7 tabelas:
-
-| Modelo | Papel |
-|---|---|
-| `User` | Usuários cadastrados por TI (sem self-service). Nunca deletado fisicamente — `active=false` para desativar. Campos de auth: `mustChangePassword`, `isTI`. |
-| `System` | Cada sistema interno (client OAuth) que consome o IdP: slug, clientId/clientSecretHash, redirectUris. |
-| `Role` | Papel dentro de um sistema específico (não é global). Único por `(systemId, name)`. |
-| `UserSystemAccess` | Concessão de acesso usuário→sistema com um papel. Revogação via `revokedAt` (nunca delete). Um acesso ativo por `(userId, systemId)`, garantido por índice único parcial (`WHERE revoked_at IS NULL`), adicionado na migration `add_active_user_system_access_unique`. |
-| `RefreshToken` | Token de sessão por sistema, com `familyId` para agrupar a linhagem de tokens rotacionados e detectar reuso. Só o hash é armazenado. |
-| `AuthorizationCode` | Código de uso único do Authorization Code Flow, vida curta, `usedAt` marca o resgate. |
-| `AuditLog` | Trilha de auditoria centralizada (login, logout, emissão de token, concessão/revogação de acesso, etc.), `userId`/`systemId` opcionais. Ações: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGOUT`, `SYSTEM_ACCESS`, `ACCESS_GRANTED`, `ACCESS_REVOKED`, `USER_CREATED`, `USER_UPDATED`, `PASSWORD_CHANGED`, `TOKEN_ISSUED`. |
-| `Session` | Sessão local do IdP, usada pelo `Store` customizado do `express-session`. |
-
-Notas de modelagem importantes (detalhadas nos comentários do schema):
-
-- Nada de delete físico em `User`, `System`, `UserSystemAccess` — histórico
-  preservado via `active`/`revokedAt`.
-- `passwordHash`, `clientSecretHash`, `tokenHash` nunca em texto puro.
-- Índices em todos os campos consultados a cada request de auth: `email`,
-  `slug`, `clientId`, `code`, `tokenHash`.
+Resumo das 8 tabelas, diagrama ER e política de soft/hard delete em
+**[docs/SCHEMA.md](docs/SCHEMA.md)**. Schema real, comentado por entidade,
+em [prisma/schema.prisma](prisma/schema.prisma) (fonte de verdade em caso
+de divergência).
 
 ## Banco de dados
 
@@ -422,3 +381,13 @@ Este projeto usa seu **próprio** container Postgres (`postgres-idp`, volume
 `idp_pgdata`, rede Docker `idp-net` própria — sem porta exposta ao host),
 isolado das redes/containers do Farol e do Contracheque Bot — não reaproveita
 infraestrutura de outro sistema.
+
+## Screenshots
+
+Menu central (`/home`) e duas telas do painel administrativo — restam
+`/login-ui` e a tela de Acessos (ver [screenshots/](screenshots/) para o
+índice completo).
+
+![Menu central pós-login](screenshots/Menu%20sistemas%20idp.png)
+![Painel administrativo - Sistemas](screenshots/Sistemas%20idp%20centralizador.jpg)
+![Painel administrativo - Usuários](screenshots/Usuarios%20idp%20centralizador%20admin.jpg)

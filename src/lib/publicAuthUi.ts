@@ -14,7 +14,7 @@ const LOGIN_UI_INDEX = path.join(LOGIN_UI_DIST, "index.html");
 //
 // Excecao deliberada ao padrao Controller/Service/Repository - isto e
 // infraestrutura de serving de arquivo estatico, nao uma rota de API.
-const PUBLIC_UI_ROUTES = ["/login-ui", "/change-password-ui", "/home"];
+const PUBLIC_UI_ROUTES = ["/login-ui", "/change-password-ui", "/home", "/erro"];
 
 export function mountPublicAuthUi(app: Express): void {
   if (!fs.existsSync(LOGIN_UI_INDEX)) {

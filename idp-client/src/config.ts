@@ -14,6 +14,9 @@ export function resolveConfig(config: IdpClientConfig): ResolvedIdpClientConfig 
     // Sem authorizeUrl proprio, cai no idpUrl - mesmo comportamento de antes
     // pra quem roda tudo na mesma maquina/rede (sem esse split de topologia).
     authorizeUrl: (config.authorizeUrl ?? config.idpUrl).replace(/\/+$/, ""),
+    // Browser-facing como o authorizeUrl (o usuario clica nesse link no proprio
+    // navegador), nao o idpUrl server-to-server.
+    homeUrl: config.homeUrl ?? `${(config.authorizeUrl ?? config.idpUrl).replace(/\/+$/, "")}/home`,
     clientId: config.clientId,
     clientSecret: config.clientSecret,
     redirectUri: config.redirectUri,

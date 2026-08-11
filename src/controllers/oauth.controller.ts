@@ -7,6 +7,15 @@ import { oauthService } from "../services/oauth.service";
 // elas preservando o fluxo original em `return_to`.
 const LOGIN_UI_URL = process.env.IDP_LOGIN_URL ?? "/login-ui";
 const PASSWORD_CHANGE_UI_URL = process.env.IDP_PASSWORD_CHANGE_URL ?? "/change-password-ui";
+// OS 17: erro pre-redirecionamento (nao ha redirect_uri confiavel pra devolver
+// o erro ao sistema cliente ainda) - mostrado aqui mesmo, no IdP, em vez de JSON cru.
+const ERROR_UI_URL = process.env.IDP_ERROR_URL ?? "/erro";
+
+const INVALID_REQUEST_MESSAGES: Record<string, string> = {
+  invalid_request: "O link de login esta incompleto. Peca ao sistema de origem pra gerar o link novamente.",
+  invalid_client: "Este sistema nao esta cadastrado ou esta desativado no IdP.",
+  invalid_redirect_uri: "O endereco de retorno deste login nao esta autorizado para este sistema.",
+};
 
 export const oauthController = {
   authorize: asyncHandler(async (req, res) => {
@@ -21,9 +30,11 @@ export const oauthController = {
     );
 
     switch (decision.kind) {
-      case "invalid_request":
-        res.status(400).json(decision.body);
+      case "invalid_request": {
+        const message = INVALID_REQUEST_MESSAGES[decision.body.error] ?? INVALID_REQUEST_MESSAGES.invalid_request;
+        res.redirect(withParams(ERROR_UI_URL, { message }));
         return;
+      }
 
       case "need_login": {
         if (decision.destroySession) {

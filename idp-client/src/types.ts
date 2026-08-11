@@ -13,6 +13,11 @@ export interface IdpClientConfig {
    * (/token, JWKS, /revoke) sempre usam `idpUrl`. @default idpUrl
    */
   authorizeUrl?: string;
+  /**
+   * Menu central do IdP (OS 13) - usado como destino do botao "Voltar aos
+   * sistemas" nas telas de erro de login (OS 17). @default `${idpUrl}/home`
+   */
+  homeUrl?: string;
   clientId: string;
   /** Nunca deve chegar ao front do sistema cliente (OS 07, secao 4). */
   clientSecret: string;
