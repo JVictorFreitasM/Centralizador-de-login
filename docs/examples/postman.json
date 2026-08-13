@@ -1,0 +1,195 @@
+{
+  "info": {
+    "name": "IdP Centralizador de Login",
+    "description": "Exemplos de requisicoes - sessao local (cookie) e OAuth2 (token)",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Sessao do IdP",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@empresa.com\",\n  \"password\": \"senha123\"\n}"
+            },
+            "url": { "raw": "{{idp_url}}/login", "host": ["{{idp_url}}"], "path": ["login"] }
+          }
+        },
+        {
+          "name": "Usuario logado (/me)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{idp_url}}/me", "host": ["{{idp_url}}"], "path": ["me"] }
+          }
+        },
+        {
+          "name": "Sistemas com acesso (/me/systems)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{idp_url}}/me/systems", "host": ["{{idp_url}}"], "path": ["me", "systems"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{idp_url}}/logout", "host": ["{{idp_url}}"], "path": ["logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "OAuth2",
+      "item": [
+        {
+          "name": "Authorize (browser)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{idp_url}}/authorize?client_id={{client_id}}&redirect_uri={{redirect_uri}}&response_type=code&state=abc123",
+              "host": ["{{idp_url}}"],
+              "path": ["authorize"],
+              "query": [
+                { "key": "client_id", "value": "{{client_id}}" },
+                { "key": "redirect_uri", "value": "{{redirect_uri}}" },
+                { "key": "response_type", "value": "code" },
+                { "key": "state", "value": "abc123" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token (authorization_code)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "authorization_code" },
+                { "key": "code", "value": "{{auth_code}}" },
+                { "key": "client_id", "value": "{{client_id}}" },
+                { "key": "client_secret", "value": "{{client_secret}}" },
+                { "key": "redirect_uri", "value": "{{redirect_uri}}" }
+              ]
+            },
+            "url": { "raw": "{{idp_url}}/token", "host": ["{{idp_url}}"], "path": ["token"] }
+          }
+        },
+        {
+          "name": "Token (refresh_token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "refresh_token" },
+                { "key": "refresh_token", "value": "{{refresh_token}}" },
+                { "key": "client_id", "value": "{{client_id}}" },
+                { "key": "client_secret", "value": "{{client_secret}}" }
+              ]
+            },
+            "url": { "raw": "{{idp_url}}/token", "host": ["{{idp_url}}"], "path": ["token"] }
+          }
+        },
+        {
+          "name": "Revoke",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "token", "value": "{{refresh_token}}" },
+                { "key": "client_id", "value": "{{client_id}}" },
+                { "key": "client_secret", "value": "{{client_secret}}" }
+              ]
+            },
+            "url": { "raw": "{{idp_url}}/revoke", "host": ["{{idp_url}}"], "path": ["revoke"] }
+          }
+        },
+        {
+          "name": "JWKS",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{idp_url}}/.well-known/jwks.json", "host": ["{{idp_url}}"], "path": [".well-known", "jwks.json"] }
+          }
+        },
+        {
+          "name": "RP-Initiated Logout (/session/end)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{idp_url}}/session/end?client_id={{client_id}}&post_logout_redirect_uri={{post_logout_redirect_uri}}",
+              "host": ["{{idp_url}}"],
+              "path": ["session", "end"],
+              "query": [
+                { "key": "client_id", "value": "{{client_id}}" },
+                { "key": "post_logout_redirect_uri", "value": "{{post_logout_redirect_uri}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (requer sessao com isTI=true)",
+      "item": [
+        {
+          "name": "Listar sistemas",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{idp_url}}/systems", "host": ["{{idp_url}}"], "path": ["systems"] }
+          }
+        },
+        {
+          "name": "Criar sistema",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Novo Sistema\",\n  \"slug\": \"novo-sistema\",\n  \"redirectUris\": [\"http://localhost:4000/auth/callback\"]\n}"
+            },
+            "url": { "raw": "{{idp_url}}/systems", "host": ["{{idp_url}}"], "path": ["systems"] }
+          }
+        },
+        {
+          "name": "Listar usuarios",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{idp_url}}/users?page=1&limit=20",
+              "host": ["{{idp_url}}"],
+              "path": ["users"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Logs de auditoria",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{idp_url}}/audit-logs", "host": ["{{idp_url}}"], "path": ["audit-logs"] }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "idp_url", "value": "http://localhost:3000" },
+    { "key": "client_id", "value": "" },
+    { "key": "client_secret", "value": "" },
+    { "key": "redirect_uri", "value": "" },
+    { "key": "auth_code", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "post_logout_redirect_uri", "value": "" }
+  ]
+}

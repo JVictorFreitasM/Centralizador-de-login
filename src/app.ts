@@ -5,6 +5,7 @@ import { redact } from "./lib/redact";
 import { router } from "./routes";
 import { DomainError } from "./errors/domain.errors";
 import { mountPublicAuthUi } from "./lib/publicAuthUi";
+import { setupSwagger } from "./swagger";
 
 // Sessao do IdP so controla "estou logado no IdP" (nao acesso a dado
 // sensivel de nenhum sistema cliente), por isso pode durar mais que o
@@ -50,6 +51,7 @@ export function createApp() {
   });
 
   mountPublicAuthUi(app);
+  setupSwagger(app);
 
   app.use(router);
 

@@ -5,4 +5,7 @@ dist/
 keys/
 frontend-referencia/
 example-client-app/
+# Gerado por `npm run docs:export` (le os comentarios @swagger das rotas) -
+# nunca editar a mao, e regenerado no CI antes do deploy pro GitHub Pages.
+docs/openapi.json
 .claude
