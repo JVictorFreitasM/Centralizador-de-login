@@ -42,6 +42,24 @@
 | [docs/FLUXOS_OAUTH2.md](docs/FLUXOS_OAUTH2.md) | Diagramas de sequência: Authorization Code, refresh, logout |
 | [screenshots/](screenshots/) | Capturas de tela das interfaces (ver pendências no índice da pasta) |
 
+## Documentação interativa da API (Swagger/ReDoc)
+
+A API é documentada via [Swagger/OpenAPI](https://swagger.io/specification/), com anotações
+`@swagger` nas rotas (`src/routes/*.ts`, `src/app.ts`).
+
+Com o backend rodando, sem prefixo (mesmo padrão das demais rotas deste projeto):
+
+| URL | Conteúdo |
+|---|---|
+| `http://localhost:3000/api-docs` | Swagger UI — interativo, permite testar os endpoints |
+| `http://localhost:3000/redoc` | ReDoc — leitura, mais confortável pra navegar |
+| `http://localhost:3000/api-docs.json` | Spec OpenAPI crua (JSON) |
+
+Sem precisar subir o backend, `npm run docs:export` gera `docs/openapi.json` só lendo os
+comentários `@swagger` (script usado no CI, `.github/workflows/deploy-docs.yml`, que publica a
+pasta `docs/` — spec, guias de autenticação/erros/rate limit e exemplos de uso — no GitHub Pages a
+cada push em `master`).
+
 ## Arquitetura
 
 Camadas: `controllers/` (HTTP) → `services/` (regra de negócio) →
